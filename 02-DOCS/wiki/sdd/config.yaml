@@ -1,0 +1,34 @@
+models:
+  enabled: false
+  provider: opencode
+  tiers:
+    heavy: opencode/nemotron-3.5-super-vl-free
+    balanced: opencode/deepseek-v4-flash-free
+    light: opencode/mimo-v2.6-flash-free
+  phases:
+    constitution: heavy
+    specify: balanced
+    clarify: balanced
+    plan: heavy
+    tasks: balanced
+    analyze: heavy
+    implement: balanced
+    verify: balanced
+    review: heavy
+    ship: light
+    debug: heavy
+    worktrees: light
+    sdd-init: light
+  overrides: {}
+  factory:
+    spec-writer: heavy
+    builder: heavy
+    reviewer-security: balanced
+    reviewer-ux: balanced
+    reviewer-ui: balanced
+    reviewer-code: balanced
+    approver: balanced
+    human-gate: balanced
+    memory-curator: balanced
+    intake: balanced
+    orchestrator: heavy

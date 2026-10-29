@@ -1,0 +1,17 @@
+{
+  "announced": true,
+  "seenBy": {},
+  "waiting": {},
+  "queue": [
+    "4cd56dc471947450bc98549318efe2e51c9ec74c"
+  ],
+  "ours": [],
+  "notices": [],
+  "clashes": [],
+  "lastFetch": 1793301887408,
+  "snap": {
+    "head": "3e80d1f1f20e47bad4f048e28cf3859558197a3f",
+    "commit": "4cd56dc471947450bc98549318efe2e51c9ec74c"
+  },
+  "head": "3e80d1f1f20e47bad4f048e28cf3859558197a3f"
+}
