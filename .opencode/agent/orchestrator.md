@@ -3,8 +3,6 @@ description: Orquesta el pipeline completo de la AI Factory: intake -> spec -> b
 mode: primary
 model: opencode/nemotron-3.5-super-vl-free
 temperature: 0.2
-tools: ["read", "write", "edit", "bash", "glob", "grep"]
-permission: ["read", "write", "edit", "bash:node 01-TOOLS/*", "bash:node factory/scripts/*"]
 ---
 
 # Agente: orchestrator

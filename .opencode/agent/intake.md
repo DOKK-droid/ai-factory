@@ -1,10 +1,8 @@
 ---
 description: Normaliza Sentry / GitHub Issue / tarea manual a input.md dentro de factory/jobs/<id>/
-mode: script
+mode: subagent
 model: opencode/deepseek-v4-flash-free
 temperature: 0.1
-tools: ["read", "write", "bash"]
-permission: ["read", "write", "bash:node 01-TOOLS/intake.js"]
 ---
 
 # Agente: intake

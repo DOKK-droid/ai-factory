@@ -3,8 +3,6 @@ description: Revisa flujos de producto, UX, accesibilidad y criterios de aceptac
 mode: subagent
 model: opencode/glm-5.3-flash-free
 temperature: 0.3
-tools: ["read", "grep", "glob"]
-permission: ["read"]
 ---
 
 # Agente: reviewer-ux

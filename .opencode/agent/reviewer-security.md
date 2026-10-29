@@ -3,8 +3,6 @@ description: Revisa seguridad, performance y observabilidad del codigo del Build
 mode: subagent
 model: opencode/glm-5.3-flash-free
 temperature: 0.2
-tools: ["read", "grep", "glob"]
-permission: ["read"]
 ---
 
 # Agente: reviewer-security

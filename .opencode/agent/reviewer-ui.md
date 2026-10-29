@@ -3,8 +3,6 @@ description: Revisa consistencia visual, componentes, responsive y design system
 mode: subagent
 model: opencode/mimo-v2.6-flash-free
 temperature: 0.3
-tools: ["read", "grep", "glob"]
-permission: ["read"]
 ---
 
 # Agente: reviewer-ui

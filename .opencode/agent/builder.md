@@ -3,8 +3,6 @@ description: Implementa el Spec usando TDD (test primero -> codigo) en worktree 
 mode: subagent
 model: opencode/nemotron-3.5-super-vl-free
 temperature: 0.2
-tools: ["read", "write", "edit", "bash", "grep", "glob"]
-permission: ["read", "write", "edit", "bash:git worktree*", "bash:git checkout*", "bash:git commit*", "bash:git add*", "bash:npm test*", "bash:npx jest*", "bash:npx vitest*"]
 ---
 
 # Agente: builder

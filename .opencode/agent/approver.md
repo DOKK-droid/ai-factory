@@ -1,10 +1,8 @@
 ---
 description: Consolida los 4 informes de revisión y el PR en decision.md
 mode: subagent
-model: opencode/nemotron-3.5-super-vl-free
+model: opencode/deepseek-v4-flash-free
 temperature: 0.2
-tools: ["read", "write", "grep", "glob"]
-permission: ["read", "write"]
 ---
 
 # Agente: approver

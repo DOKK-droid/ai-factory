@@ -1,10 +1,8 @@
 ---
 description: Analiza riesgo y decide si el cambio puede ir solo o necesita revision humana
 mode: subagent
-model: opencode/nemotron-3.5-super-vl-free
+model: opencode/deepseek-v4-flash-free
 temperature: 0.2
-tools: ["read", "grep", "glob"]
-permission: ["read", "write"]
 ---
 
 # Agente: human-gate

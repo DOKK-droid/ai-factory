@@ -3,8 +3,6 @@ description: Revisa legibilidad, bugs, convenciones, arquitectura y cumplimiento
 mode: subagent
 model: opencode/deepseek-v4-flash-free
 temperature: 0.2
-tools: ["read", "grep", "glob", "bash"]
-permission: ["read", "bash:npm test*", "bash:npx jest*", "bash:npx vitest*"]
 ---
 
 # Agente: reviewer-code

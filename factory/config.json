@@ -12,8 +12,8 @@
     "reviewer-ux": "sol",
     "reviewer-ui": "astra",
     "reviewer-code": "sonnet",
-    "approver": "opus",
-    "human-gate": "opus",
+    "approver": "sonnet",
+    "human-gate": "sonnet",
     "memory-curator": "sonnet",
     "intake": "sonnet",
     "orchestrator": "opus"

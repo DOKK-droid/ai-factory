@@ -3,8 +3,6 @@ description: Genera un Spec SDD completo consultando el Brain (02-DOCS/) antes d
 mode: subagent
 model: opencode/nemotron-3.5-super-vl-free
 temperature: 0.3
-tools: ["read", "write", "edit", "grep", "glob"]
-permission: ["read", "write", "edit"]
 ---
 
 # Agente: spec-writer

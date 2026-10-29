@@ -3,12 +3,16 @@
     "bash": {
       "git commit": "allow",
       "git commit *": "allow",
-      "git push": "ask",
-      "git push *": "ask",
+      "git push": "deny",
+      "git push *": "deny",
       "git push --force*": "deny",
       "git push -f*": "deny",
       "git push * --force*": "deny",
       "git push * -f*": "deny",
+      "git merge": "deny",
+      "git merge *": "deny",
+      "gh pr merge": "deny",
+      "gh pr merge *": "deny",
       "git worktree add": "allow",
       "git worktree remove": "allow",
       "git worktree list": "allow",
@@ -34,8 +38,8 @@
       "npx @ericrisco/rsc@latest onboard": "allow",
       "npx @ericrisco/rsc@latest *": "ask",
       "npx @ericrisco/rsc@3.6.0 *": "allow",
-      "gh pr create": "ask",
-      "gh pr create *": "ask",
+      "gh pr create": "allow",
+      "gh pr create *": "allow",
       "gh pr view": "allow",
       "gh pr view *": "allow",
       "gh auth status": "allow",
@@ -45,5 +49,6 @@
       "read .env*": "deny"
     }
   },
+  "plugins": [".opencode/plugins/factory-guard.js"],
   "$schema": "https://opencode.ai/config.json"
 }
