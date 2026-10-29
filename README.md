@@ -43,3 +43,5 @@ Input → Spec Writer ←→ Brain → Builder ←→ Brain → [4 Revisores en 
 - Sin push a main salvo fast_path habilitado explícitamente
 - Cada job deja traza en `factory/jobs/<id>/`
 - Todos los agentes leen `02-DOCS/` antes de actuar y escriben al terminar
+
+<!-- comentario de prueba -->
