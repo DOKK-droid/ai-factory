@@ -1,0 +1,507 @@
+{
+  "schemaVersion": 1,
+  "id": "20261029-171328-onboard-opencode",
+  "createdAt": "2026-10-29T17:13:28.159Z",
+  "operation": "onboard",
+  "target": "opencode",
+  "cwd": "/home/frappe/ai-factory",
+  "cliVersion": "3.6.0",
+  "entries": [
+    {
+      "path": ".opencode/rsc/.rsc-state.json",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/.version",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/.base-versions.json",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/.no-context7",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/session-memory-core.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/session-memory-adapter.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/session-memory.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/plugins/rsc-memory.js",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/auto-update.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/memslop-offer.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/plugins/rsc-update.js",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/knowledge-sync.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/trunk-policy.mjs",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/plugins/rsc-knowledge.js",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": "opencode.json",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/agents/developer.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/agents/finding-verifier.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/agents/refuter-correctness.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/agents/refuter-security.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/agents/refuter-tests.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/analyze.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/checkpoint.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/clarify.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/debug.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/harness-audit.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/implement.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/learn.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/plan.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/refactor-clean.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/resume-session.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/review.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/save-session.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/ship.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/specify.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/tasks.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/commands/verify.md",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/analyze",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/analyze",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/automation-strategy",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/automation-strategy",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/clarify",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/clarify",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/connect-tool",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/connect-tool",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/constitution",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/constitution",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/debug",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/debug",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/decision-challenge",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/decision-challenge",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/deprecation",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/deprecation",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/design",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/design",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/fable-operator",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/fable-operator",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/ftd",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/ftd",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/harness",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/harness",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/idea-refinement",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/idea-refinement",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/implement",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/implement",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/init",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/init",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/orient",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/orient",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/parallel",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/parallel",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/plan",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/plan",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/review",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/review",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/sdd",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/sdd",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/sdd-init",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/sdd-init",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/ship",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/ship",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/simplify-code",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/simplify-code",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/source-grounded-development",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/source-grounded-development",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/specify",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/specify",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/suggest",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/suggest",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/tasks",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/tasks",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/unslop",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/unslop",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/ux",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/ux",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/verify",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/verify",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".opencode/rsc/worktrees",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": ".rsc/skills/worktrees",
+      "existed": false,
+      "kind": "missing"
+    },
+    {
+      "path": "AGENTS.md",
+      "existed": true,
+      "kind": "file",
+      "contentPath": "files/AGENTS.md"
+    }
+  ]
+}

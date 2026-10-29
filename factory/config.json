@@ -1,0 +1,33 @@
+{
+  "tiers": {
+    "opus":   "opencode/nemotron-3.5-super-vl-free",
+    "sonnet": "opencode/deepseek-v4-flash-free",
+    "sol":    "opencode/glm-5.3-flash-free",
+    "astra":  "opencode/mimo-v2.6-flash-free"
+  },
+  "roles": {
+    "spec-writer": "opus",
+    "builder": "opus",
+    "reviewer-security": "sol",
+    "reviewer-ux": "sol",
+    "reviewer-ui": "astra",
+    "reviewer-code": "sonnet",
+    "approver": "opus",
+    "human-gate": "opus",
+    "memory-curator": "sonnet",
+    "intake": "sonnet",
+    "orchestrator": "opus"
+  },
+  "fallback": {
+    "opus":   "opencode/deepseek-v4-flash-free",
+    "sonnet": "opencode/deepseek-v4-flash-free",
+    "sol":    "opencode/deepseek-v4-flash-free",
+    "astra":  "opencode/deepseek-v4-flash-free"
+  },
+  "max_rounds": 3,
+  "max_diff_lines": 400,
+  "fast_path": {
+    "enabled": false,
+    "min_score": 0.85
+  }
+}

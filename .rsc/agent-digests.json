@@ -1,0 +1,7 @@
+{
+  ".opencode/agents/developer.md": "f4dc18be6aedc63270f4d5afd6949bf482902688036732c95117e4b8c4709cac",
+  ".opencode/agents/finding-verifier.md": "cc1786de1a6f0380f99fd5e6c0f5f76965d555d0cf6b7e51af09f33efc4212d8",
+  ".opencode/agents/refuter-correctness.md": "7807a02bd5ae3163eb48901e5f8dd6cba00e16355a9f895b5c8856f278eeea56",
+  ".opencode/agents/refuter-security.md": "79dcd57da06d4e51b67f6f531b51aacb30e391ad114f34213d9c65ed908053dc",
+  ".opencode/agents/refuter-tests.md": "13782f354a381ef78431ff68e61f39e1a62117be876cdef35a08d66d275c7f17"
+}

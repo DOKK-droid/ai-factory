@@ -1,0 +1,257 @@
+{
+  "skills": {
+    "analyze": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/analyze"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/analyze"
+    },
+    "automation-strategy": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/automation-strategy"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/automation-strategy"
+    },
+    "clarify": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/clarify"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/clarify"
+    },
+    "connect-tool": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/connect-tool"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/connect-tool"
+    },
+    "constitution": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/constitution"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/constitution"
+    },
+    "debug": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/debug"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/debug"
+    },
+    "decision-challenge": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/decision-challenge"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/decision-challenge"
+    },
+    "deprecation": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/deprecation"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/deprecation"
+    },
+    "design": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/design"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/design"
+    },
+    "fable-operator": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/fable-operator"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/fable-operator"
+    },
+    "ftd": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/ftd"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/ftd"
+    },
+    "harness": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/harness"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/harness"
+    },
+    "idea-refinement": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/idea-refinement"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/idea-refinement"
+    },
+    "implement": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/implement"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/implement"
+    },
+    "init": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/init"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/init"
+    },
+    "orient": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/orient"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/orient"
+    },
+    "parallel": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/parallel"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/parallel"
+    },
+    "plan": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/plan"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/plan"
+    },
+    "review": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/review"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/review"
+    },
+    "sdd": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/sdd"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/sdd"
+    },
+    "sdd-init": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/sdd-init"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/sdd-init"
+    },
+    "ship": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/ship"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/ship"
+    },
+    "simplify-code": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/simplify-code"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/simplify-code"
+    },
+    "source-grounded-development": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/source-grounded-development"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/source-grounded-development"
+    },
+    "specify": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/specify"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/specify"
+    },
+    "suggest": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/suggest"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/suggest"
+    },
+    "tasks": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/tasks"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/tasks"
+    },
+    "unslop": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/unslop"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/unslop"
+    },
+    "ux": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/ux"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/ux"
+    },
+    "verify": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/verify"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/verify"
+    },
+    "worktrees": {
+      "files": [
+        "/home/frappe/ai-factory/.opencode/rsc/worktrees"
+      ],
+      "base": "/home/frappe/ai-factory/.rsc/skills/worktrees"
+    }
+  },
+  "agents": [
+    "developer",
+    "finding-verifier",
+    "refuter-correctness",
+    "refuter-security",
+    "refuter-tests"
+  ],
+  "agentCollisions": [],
+  "agentsKept": [],
+  "explicitAgents": [],
+  "memory": {
+    "mode": "full",
+    "reason": "wired",
+    "paths": [
+      "/home/frappe/ai-factory/.rsc/session-memory-core.mjs",
+      "/home/frappe/ai-factory/.rsc/session-memory-adapter.mjs",
+      "/home/frappe/ai-factory/.rsc/session-memory.mjs",
+      "/home/frappe/ai-factory/.opencode/plugins/rsc-memory.js"
+    ]
+  },
+  "update": {
+    "mode": "hook"
+  },
+  "knowledge": {
+    "mode": "wired",
+    "reason": null,
+    "paths": [
+      "/home/frappe/ai-factory/.rsc/knowledge-sync.mjs",
+      "/home/frappe/ai-factory/.rsc/trunk-policy.mjs",
+      "/home/frappe/ai-factory/.opencode/plugins/rsc-knowledge.js"
+    ]
+  },
+  "gitPermissions": {
+    "mode": "wired",
+    "path": "/home/frappe/ai-factory/opencode.json",
+    "format": "v1"
+  },
+  "policy": {
+    "baseAgents": true,
+    "alwaysOn": true,
+    "codeHooks": true,
+    "dangerGuard": true,
+    "laneGate": true,
+    "gitmojiGuard": false,
+    "memory": true,
+    "context7": false
+  },
+  "commands": [
+    "analyze",
+    "checkpoint",
+    "clarify",
+    "debug",
+    "harness-audit",
+    "implement",
+    "learn",
+    "plan",
+    "refactor-clean",
+    "resume-session",
+    "review",
+    "save-session",
+    "ship",
+    "specify",
+    "tasks",
+    "verify"
+  ],
+  "commandCollisions": [],
+  "version": "3.6.0"
+}

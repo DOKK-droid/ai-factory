@@ -1,0 +1,15 @@
+{
+  "name": "ai-factory",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "AI Software Factory sobre OpenCode con RSC Harness y modelos gratuitos",
+  "private": true,
+  "scripts": {
+    "factory:checks": "node 01-TOOLS/checks.js",
+    "factory:intake": "node 01-TOOLS/intake.js",
+    "factory:apply-models": "node factory/scripts/apply-models.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
