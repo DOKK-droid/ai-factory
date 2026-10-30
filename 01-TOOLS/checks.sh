@@ -10,6 +10,7 @@
 #   FACTORY_CONFIG=<ruta>        config (por defecto factory/config.json; clave gate.test_cmd)
 #   FACTORY_JOBS_DIR=<ruta>      carpeta de jobs (por defecto factory/jobs)
 set -uo pipefail
+unset FORCE_COLOR; export NO_COLOR=1 NODE_DISABLE_COLORS=1
 
 JOB_ID="${1:-}"
 JOBS_DIR="${FACTORY_JOBS_DIR:-factory/jobs}"

@@ -10,6 +10,9 @@
 # Variables opcionales: FACTORY_JOBS_DIR, FACTORY_CONFIG, FACTORY_BASE (rama base), FACTORY_HEAD
 set -uo pipefail
 
+# Sin colores ANSI: node -p pinta numeros/booleanos si FORCE_COLOR esta activo en el entorno
+unset FORCE_COLOR; export NO_COLOR=1 NODE_DISABLE_COLORS=1
+
 JOB_ID="${1:?Uso: risk.sh <job-id>}"
 JOBS_DIR="${FACTORY_JOBS_DIR:-factory/jobs}"
 CONFIG="${FACTORY_CONFIG:-factory/config.json}"
@@ -19,7 +22,7 @@ HEAD_REF="${FACTORY_HEAD:-HEAD}"
 [ -d "$JOB_DIR" ] || { echo "ERROR: el job ${JOB_ID} no existe en ${JOB_DIR}" >&2; exit 2; }
 
 cfg() { # cfg <expresion js sobre c> <defecto>
-  node -p "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));const v=($1);v===undefined||v===null?'$2':v}catch(e){'$2'}" 2>/dev/null || echo "$2"
+  node -p "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));const v=($1);String(v===undefined||v===null?'$2':v)}catch(e){String('$2')}" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -m1 . || echo "$2"
 }
 MAX_DIFF_LINES="$(cfg 'c.max_diff_lines' 400)"
 MIN_SCORE="$(cfg '(c.fast_path||{}).min_score' 0.85)"

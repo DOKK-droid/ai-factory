@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// Simula terminales con color forzado: node -p pinta booleanos/numeros con codigos ANSI
+process.env.FORCE_COLOR = '1'; delete process.env.NO_COLOR; delete process.env.NODE_DISABLE_COLORS;
+
 export const REPO = path.resolve(new URL('..', import.meta.url).pathname);
 export const tmp = (p = 'af-') => fs.mkdtempSync(path.join(os.tmpdir(), p));
 export const write = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
