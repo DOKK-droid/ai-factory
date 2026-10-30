@@ -57,7 +57,8 @@
       "gh pr ready*": "deny",
       "gh auth token*": "deny",
       "gh secret *": "deny",
-      "gh repo delete*": "deny"
+      "gh repo delete*": "deny",
+      "git push -u origin factory/*": "allow"
     },
     "read": {
       "*": "allow",
