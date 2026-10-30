@@ -3,6 +3,20 @@ description: Analiza riesgo y decide si el cambio puede ir solo o necesita revis
 mode: subagent
 model: opencode/deepseek-v4-flash-free
 temperature: 0.2
+permission:
+  edit:
+    "*": deny
+    "factory/jobs/*/human.md": allow
+  bash:
+    "*": deny
+    "git diff*": allow
+    "git log*": allow
+    "git status*": allow
+    "git show*": allow
+    "grep *": allow
+    "rg *": allow
+    "bash 01-TOOLS/risk.sh*": allow
+  webfetch: deny
 ---
 
 # Agente: human-gate

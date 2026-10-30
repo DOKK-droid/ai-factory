@@ -1,78 +1,42 @@
 #!/usr/bin/env node
 /**
  * apply-models.js
- * Lee factory/config.json y reescribe el campo `model:` del frontmatter
- * de cada agente en .opencode/agent/*.md segun el mapeo tiers -> modelo.
+ * Lee factory/config.json y reescribe SOLO la linea `model:` del frontmatter de cada
+ * agente en .opencode/agent/*.md. No toca el resto del frontmatter (por ejemplo los
+ * bloques `permission:` anidados), asi que es seguro ejecutarlo tras anadir permisos.
+ * Uso: node factory/scripts/apply-models.js [--check]
+ *   --check  no escribe; sale con codigo 1 si algun agente no coincide con la config.
  */
 import fs from 'fs';
 import path from 'path';
 
 const ROOT = process.cwd();
-const CONFIG_PATH = path.join(ROOT, 'factory', 'config.json');
+const CONFIG_PATH = process.env.FACTORY_CONFIG || path.join(ROOT, 'factory', 'config.json');
 const AGENTS_DIR = path.join(ROOT, '.opencode', 'agent');
+const CHECK = process.argv.includes('--check');
 
-function readJson(p) {
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+const { tiers = {}, roles = {} } = config;
+let problems = 0;
+
+for (const [role, tier] of Object.entries(roles)) {
+  if (!tiers[tier]) { console.error(`[apply-models] ERROR: el rol ${role} usa el tier "${tier}" que no existe en tiers`); problems++; }
 }
 
-function writeFile(p, content) {
-  fs.writeFileSync(p, content, 'utf8');
+for (const file of fs.readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.md')).sort()) {
+  const agent = file.replace(/\.md$/, '');
+  const full = path.join(AGENTS_DIR, file);
+  const content = fs.readFileSync(full, 'utf8');
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n[\s\S]*)?$/);
+  const model = tiers[roles[agent]];
+  if (!m) { console.error(`[apply-models] ERROR: ${file} no tiene frontmatter`); problems++; continue; }
+  if (!model) { console.error(`[apply-models] AVISO: ${file} sin rol/tier en config; no se toca`); problems++; continue; }
+
+  const fm = m[1];
+  const next = /^model:.*$/m.test(fm) ? fm.replace(/^model:.*$/m, `model: ${model}`) : `${fm}\nmodel: ${model}`;
+  if (next === fm) { console.log(`[apply-models] ${file} ya usa ${model}`); continue; }
+  if (CHECK) { console.error(`[apply-models] DESAJUSTE: ${file} no usa ${model}`); problems++; continue; }
+  fs.writeFileSync(full, `---\n${next}\n---${m[2] ?? '\n'}`, 'utf8');
+  console.log(`[apply-models] ${file} -> ${model}`);
 }
-
-function extractFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  if (!match) return { frontmatter: {}, body: content };
-  const fmText = match[1];
-  const body = match[2];
-  const fm = {};
-  for (const line of fmText.split('\n')) {
-    const idx = line.indexOf(':');
-    if (idx > 0) {
-      const key = line.slice(0, idx).trim();
-      const val = line.slice(idx + 1).trim().replace(/^"|"$|^'|'$/g, '');
-      fm[key] = val;
-    }
-  }
-  return { frontmatter: fm, body };
-}
-
-function buildFrontmatter(fm) {
-  const lines = ['---'];
-  const orderedKeys = ['description', 'mode', 'model', 'temperature', 'tools', 'permission'];
-  for (const k of orderedKeys) {
-    if (k in fm) lines.push(`${k}: ${fm[k]}`);
-  }
-  for (const [k, v] of Object.entries(fm)) {
-    if (!orderedKeys.includes(k)) lines.push(`${k}: ${v}`);
-  }
-  lines.push('---');
-  return lines.join('\n') + '\n';
-}
-
-function main() {
-  const config = readJson(CONFIG_PATH);
-  const tiers = config.tiers;
-  const roles = config.roles;
-
-  const files = fs.readdirSync(AGENTS_DIR).filter(f => f.endsWith('.md'));
-
-  for (const file of files) {
-    const fullPath = path.join(AGENTS_DIR, file);
-    const content = fs.readFileSync(fullPath, 'utf8');
-    const { frontmatter, body } = extractFrontmatter(content);
-
-    // Buscar el rol del agente por nombre de archivo (sin .md)
-    const agentName = file.replace(/\.md$/, '');
-    const role = roles[agentName];
-
-    if (role && tiers[role]) {
-      frontmatter.model = tiers[role];
-      writeFile(fullPath, buildFrontmatter(frontmatter) + body);
-      console.log(`[apply-models] ${file} -> model: ${tiers[role]} (rol: ${role})`);
-    } else {
-      console.log(`[apply-models] ${file} sin rol mapeado, se deja igual`);
-    }
-  }
-}
-
-main();
+process.exit(problems ? 1 : 0);

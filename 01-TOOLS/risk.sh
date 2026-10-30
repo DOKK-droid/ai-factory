@@ -1,199 +1,133 @@
 #!/usr/bin/env bash
-# risk.sh - Human-gate determinista
-# Evalúa criterios de riesgo y escribe human.md con FAST_PATH o NEEDS_HUMAN
-# Uso: bash 01-TOOLS/risk.sh <job-id>
-set -euo pipefail
+# risk.sh — Human-gate DETERMINISTA. Escribe factory/jobs/<id>/human.md
+# (primera linea: FAST_PATH o NEEDS_HUMAN).
+# Uso (desde la worktree del job): bash 01-TOOLS/risk.sh <job-id>
+#
+# Principios: falla cerrado (cualquier dato ausente o ambiguo => NEEDS_HUMAN), usa el
+# ULTIMO round, y calcula diff/rutas/dependencias/tests con `git diff` real, no con
+# lo que el builder cuente en build.md.
+#
+# Variables opcionales: FACTORY_JOBS_DIR, FACTORY_CONFIG, FACTORY_BASE (rama base), FACTORY_HEAD
+set -uo pipefail
 
-JOB_ID="${1:?Falta ID de job}"
-JOB_DIR="factory/jobs/${JOB_ID}"
-CONFIG="factory/config.json"
+JOB_ID="${1:?Uso: risk.sh <job-id>}"
+JOBS_DIR="${FACTORY_JOBS_DIR:-factory/jobs}"
+CONFIG="${FACTORY_CONFIG:-factory/config.json}"
+JOB_DIR="${JOBS_DIR}/${JOB_ID}"
+HEAD_REF="${FACTORY_HEAD:-HEAD}"
 
-if [ ! -d "${JOB_DIR}" ]; then
-  echo "ERROR: Job ${JOB_ID} no existe en ${JOB_DIR}"
-  exit 1
-fi
+[ -d "$JOB_DIR" ] || { echo "ERROR: el job ${JOB_ID} no existe en ${JOB_DIR}" >&2; exit 2; }
 
-# Leer configuración con node (solo valores flotantes)
-MAX_DIFF_LINES=$(node -e "console.log(require('./${CONFIG}').max_diff_lines || 400)" 2>/dev/null || echo 400)
-MIN_SCORE=$(node -e "console.log(require('./${CONFIG}').fast_path.min_score || 0.85)" 2>/dev/null || echo 0.85)
-FAST_PATH_ENABLED=$(node -e "console.log(require('./${CONFIG}').fast_path.enabled || false)" 2>/dev/null || echo false)
-
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-RISKS=()
-EVIDENCES=()
-
-# Helper: comparar score < min_score usando node (para flotantes)
-score_below_min() {
-  local score="$1"
-  node -e "console.log(parseFloat('${score}') < parseFloat('${MIN_SCORE}') ? 'yes' : 'no')" 2>/dev/null || echo "no"
+cfg() { # cfg <expresion js sobre c> <defecto>
+  node -p "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));const v=($1);v===undefined||v===null?'$2':v}catch(e){'$2'}" 2>/dev/null || echo "$2"
 }
+MAX_DIFF_LINES="$(cfg 'c.max_diff_lines' 400)"
+MIN_SCORE="$(cfg '(c.fast_path||{}).min_score' 0.85)"
+FAST_PATH_ENABLED="$(cfg '(c.fast_path||{}).enabled' false)"
+BASE_REF="${FACTORY_BASE:-$(cfg 'c.base_branch' main)}"
 
-# 1. Verificar decision.md del approver
-if [ -f "${JOB_DIR}/decision.md" ]; then
-  DECISION=$(head -1 "${JOB_DIR}/decision.md" 2>/dev/null || echo "")
-  if [ "${DECISION}" = "CHANGES" ] || [ "${DECISION}" = "ESCALATE" ]; then
-    RISKS+=("approver_devolvio_cambios")
-    EVIDENCES+=("Aprobador devolvió: ${DECISION}")
-  fi
-fi
+RISKS=(); EVID=()
+add() { RISKS+=("$1"); EVID+=("$2"); }
+trim() { sed 's/\r$//; s/^[[:space:]]*//; s/[[:space:]]*$//'; }
 
-# 2. Verificar scores de los 4 revisores
-for reviewer in security ux ui code; do
-  REVIEW_FILE=$(ls "${JOB_DIR}"/round-*/review-${reviewer}.md 2>/dev/null | head -1)
-  if [ -f "${REVIEW_FILE}" ]; then
-    SCORE=$(grep "^SCORE:" "${REVIEW_FILE}" 2>/dev/null | awk '{print $2}' || echo "0")
-    VERDICT=$(head -1 "${REVIEW_FILE}" 2>/dev/null || echo "")
-    # Comparar score < min_score usando node para flotantes
-    if [ "$(score_below_min "${SCORE}")" = "yes" ]; then
-      RISKS+=("score_bajo_${reviewer}")
-      EVIDENCES+=("${reviewer}: score ${SCORE} < ${MIN_SCORE}")
-    fi
-    # Verificar veredictos contradictorios
-    if [ "${VERDICT}" = "CHANGES" ]; then
-      RISKS+=("reviewer_changes_${reviewer}")
-      EVIDENCES+=("${reviewer}: veredicto CHANGES")
-    fi
-  fi
-done
-
-# 3. Verificar diff > max_diff_lines (entero con bash)
-DIFF_LINES=0
-if [ -f "${JOB_DIR}/build.md" ]; then
-  DIFF_LINES=$(grep -c "^[+-]" "${JOB_DIR}/build.md" 2>/dev/null || echo 0)
-  DIFF_LINES=${DIFF_LINES:-0}
-  # Asegurar que es un entero limpio
-  DIFF_LINES=$(echo "${DIFF_LINES}" | tr -cd '0-9')
-  DIFF_LINES=${DIFF_LINES:-0}
-fi
-if [ "${DIFF_LINES}" -gt "${MAX_DIFF_LINES}" ] 2>/dev/null; then
-  RISKS+=("diff_excede_limite")
-  EVIDENCES+=("Diff: ${DIFF_LINES} líneas > ${MAX_DIFF_LINES} máximo")
-fi
-
-# 4. Verificar rutas sensibles (auth, pagos, datos personales, migraciones, CI)
-SENSITIVE_PATTERNS="auth|payment|pago|migraci|migration|ci/|\.github/workflows|deploy|despliegue|personal|datos"
-SENSITIVE_FILES=0
-if [ -f "${JOB_DIR}/build.md" ]; then
-  SENSITIVE_FILES=$(grep -ciE "${SENSITIVE_PATTERNS}" "${JOB_DIR}/build.md" 2>/dev/null || echo 0)
-  SENSITIVE_FILES=${SENSITIVE_FILES:-0}
-fi
-if [ "${SENSITIVE_FILES}" -gt 0 ] 2>/dev/null; then
-  RISKS+=("rutas_sensibles")
-  EVIDENCES+=("Archivos sensibles detectados: auth/pagos/migraciones/CI/despliegue")
-fi
-
-# 5. Verificar dependencias nuevas
-NEW_DEPS=0
-if [ -f "${JOB_DIR}/build.md" ]; then
-  NEW_DEPS=$(grep -ciE "npm install|package\.json|add.*dependenc" "${JOB_DIR}/build.md" 2>/dev/null || echo 0)
-  NEW_DEPS=${NEW_DEPS:-0}
-fi
-if [ "${NEW_DEPS}" -gt 0 ] 2>/dev/null; then
-  RISKS+=("nuevas_dependencias")
-  EVIDENCES+=("Se detectaron nuevas dependencias en build.md")
-fi
-
-# 6. Verificar tests modificados para hacerlos pasar
-TESTS_MODIFIED=0
-if [ -f "${JOB_DIR}/build.md" ]; then
-  TESTS_MODIFIED=$(grep -ciE "test.*pasar|hacer.*pasar|test.*modify|modificar.*test" "${JOB_DIR}/build.md" 2>/dev/null || echo 0)
-  TESTS_MODIFIED=${TESTS_MODIFIED:-0}
-fi
-if [ "${TESTS_MODIFIED}" -gt 0 ] 2>/dev/null; then
-  RISKS+=("tests_modificados")
-  EVIDENCES+=("Se detectaron pruebas modificadas posiblemente para hacerlas pasar")
-fi
-
-# 7. Verificar reviewers en desacuerdo
-VERDICTS=()
-for reviewer in security ux ui code; do
-  REVIEW_FILE=$(ls "${JOB_DIR}"/round-*/review-${reviewer}.md 2>/dev/null | head -1)
-  if [ -f "${REVIEW_FILE}" ]; then
-    V=$(head -1 "${REVIEW_FILE}" 2>/dev/null || echo "")
-    VERDICTS+=("${V}")
-  fi
-done
-# Si hay al menos un PASS y un CHANGES, hay desacuerdo
-HAS_PASS=0
-HAS_CHANGES=0
-for V in "${VERDICTS[@]}"; do
-  if [ "${V}" = "PASS" ] || [ "${V}" = "PASS (n/a)" ]; then HAS_PASS=1; fi
-  if [ "${V}" = "CHANGES" ]; then HAS_CHANGES=1; fi
-done
-if [ "${HAS_PASS}" -eq 1 ] && [ "${HAS_CHANGES}" -eq 1 ]; then
-  RISKS+=("reviewers_en_desacuerdo")
-  EVIDENCES+=("Reviewers con veredictos contradictorios: PASS y CHANGES")
-fi
-
-# Decisión final
-if [ ${#RISKS[@]} -gt 0 ]; then
-  RESULT="NEEDS_HUMAN"
+# ---------- 1. Reviews del ULTIMO round ----------
+LAST_ROUND="$(ls -d "${JOB_DIR}"/round-* 2>/dev/null | sort -V | tail -1 || true)"
+SURFACE="$(sed -n 's/^Surface:[[:space:]]*//p' "${JOB_DIR}/spec.md" 2>/dev/null | head -1 | trim)"
+HAS_PASS=0; HAS_CHANGES=0
+if [ -z "$LAST_ROUND" ]; then
+  add "sin_reviews" "No hay ningun round-N con reviews"
 else
-  if [ "${FAST_PATH_ENABLED}" = "true" ]; then
-    RESULT="FAST_PATH"
+  for r in security ux ui code; do
+    f="${LAST_ROUND}/review-${r}.md"
+    if [ ! -f "$f" ]; then add "review_faltante_${r}" "Falta ${f}"; continue; fi
+    verdict="$(sed -n 's/^VERDICT:[[:space:]]*//p' "$f" | head -1 | trim)"
+    score="$(sed -n 's/^SCORE:[[:space:]]*//p' "$f" | head -1 | trim)"
+    case "$verdict" in
+      PASS) HAS_PASS=1 ;;
+      "PASS (n/a)") HAS_PASS=1
+        [ "$SURFACE" = "page" ] && add "na_con_superficie_${r}" "${r} marco n/a pero el spec dice Surface: page" ;;
+      CHANGES) HAS_CHANGES=1; add "reviewer_changes_${r}" "${r}: VERDICT CHANGES" ;;
+      *) add "verdict_invalido_${r}" "${r}: veredicto '${verdict}' no reconocido" ;;
+    esac
+    if [ "$verdict" != "PASS (n/a)" ]; then
+      if ! printf '%s' "$score" | grep -Eq '^(0(\.[0-9]+)?|1(\.0+)?)$'; then
+        add "score_invalido_${r}" "${r}: SCORE '${score}' ausente o invalido"
+      elif awk -v s="$score" -v m="$MIN_SCORE" 'BEGIN{exit !(s<m)}'; then
+        add "score_bajo_${r}" "${r}: score ${score} < ${MIN_SCORE}"
+      fi
+    fi
+  done
+  [ "$HAS_PASS" -eq 1 ] && [ "$HAS_CHANGES" -eq 1 ] && add "reviewers_en_desacuerdo" "Hay reviewers en PASS y otros en CHANGES"
+fi
+
+# ---------- 2. Decision del approver y gate ----------
+DECISION="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/decision.md" 2>/dev/null | trim || true)"
+[ "$DECISION" = "APPROVE" ] || add "approver_no_aprueba" "decision.md: '${DECISION:-ausente}' (se exige APPROVE)"
+GATE="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/gate.md" 2>/dev/null | trim || true)"
+[ "$GATE" = "GATE: PASS" ] || add "gate_no_pasa" "gate.md: '${GATE:-ausente}' (se exige GATE: PASS)"
+
+# ---------- 3. Diff real ----------
+BASE_OK=""
+for cand in "$BASE_REF" "origin/${BASE_REF}"; do
+  if git rev-parse --verify -q "${cand}^{commit}" >/dev/null 2>&1; then BASE_OK="$cand"; break; fi
+done
+if [ -z "$BASE_OK" ] || ! git rev-parse --verify -q "${HEAD_REF}^{commit}" >/dev/null 2>&1; then
+  add "diff_no_disponible" "No pude calcular el diff (base='${BASE_REF}', head='${HEAD_REF}')"
+else
+  NUMSTAT="$(git diff --numstat "${BASE_OK}...${HEAD_REF}" 2>/dev/null || true)"
+  FILES="$(printf '%s\n' "$NUMSTAT" | awk 'NF>=3{print $3}')"
+  DIFF_LINES="$(printf '%s\n' "$NUMSTAT" | awk 'NF>=3{ if($1!="-") a+=$1; if($2!="-") d+=$2 } END{print a+d+0}')"
+  [ -z "$FILES" ] && add "diff_vacio" "El diff contra ${BASE_OK} esta vacio"
+  [ "$DIFF_LINES" -gt "$MAX_DIFF_LINES" ] && add "diff_excede_limite" "Diff: ${DIFF_LINES} lineas > ${MAX_DIFF_LINES}"
+
+  SENS_RE='(^|/)(auth|authn|authz|login|session|oauth|payments?|billing|checkout|pagos?|migrations?|migraci[oó]n|secrets?|credentials?)([/._-]|$)|\.github/workflows|(^|/)ci/|(^|/)deploy|dockerfile|docker-compose|terraform|\.tf$|(^|/)(helm|k8s|kubernetes|infra)(/|$)|(^|/)\.env'
+  S="$(printf '%s\n' "$FILES" | grep -Ei "$SENS_RE" | head -5 | paste -sd, - || true)"
+  [ -n "$S" ] && add "rutas_sensibles" "Rutas sensibles tocadas: ${S}"
+
+  DEP_RE='(^|/)(package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|Pipfile(\.lock)?|go\.(mod|sum)|Cargo\.(toml|lock)|Gemfile(\.lock)?|composer\.(json|lock)|pom\.xml|build\.gradle(\.kts)?)$'
+  D="$(printf '%s\n' "$FILES" | grep -E "$DEP_RE" | head -5 | paste -sd, - || true)"
+  [ -n "$D" ] && add "dependencias_modificadas" "Manifiestos de dependencias modificados: ${D}"
+
+  TEST_RE='(^|/)(tests?|__tests__|spec)(/|$)|\.(test|spec)\.[a-z]+$|_test\.(go|py)$|(^|/)test_[^/]*\.py$'
+  TFILES="$(printf '%s\n' "$FILES" | grep -E "$TEST_RE" || true)"
+  SRC="$(printf '%s\n' "$FILES" | grep -E '\.(js|jsx|mjs|ts|tsx|py|go|rb|java|rs|php|cs)$' | grep -Ev "$TEST_RE" || true)"
+  [ -n "$SRC" ] && [ -z "$TFILES" ] && add "sin_tests_en_el_diff" "Hay cambios de codigo pero ningun archivo de test en el diff (TDD)"
+  if [ -n "$TFILES" ]; then
+    DEL="$(printf '%s\n' "$NUMSTAT" | awk -F'\t' -v re="$TEST_RE" '$3 ~ re && $2!="-" {d+=$2} END{print d+0}')"
+    [ "$DEL" -gt 0 ] && add "tests_existentes_modificados" "Se eliminaron ${DEL} lineas en archivos de test"
+    # shellcheck disable=SC2086
+    PATCH="$(git diff -U0 "${BASE_OK}...${HEAD_REF}" -- $(printf '%s\n' "$TFILES" | tr '\n' ' ') 2>/dev/null || true)"
+    if printf '%s\n' "$PATCH" | grep -E '^\+' | grep -Eq 'expect\((true|1)\)\.(toBe|toEqual)\((true|1)\)|assert\(true\)|assert +True\b|assertTrue\(true\)|\.skip\(|\bxit\(|\bxdescribe\(|pytest\.mark\.skip|t\.Skip\('; then
+      add "test_trivial_o_skip" "Se agregaron asserts triviales o tests saltados"
+    fi
+  fi
+fi
+
+# ---------- 4. Resultado ----------
+RESULT="NEEDS_HUMAN"
+if [ "${#RISKS[@]}" -eq 0 ] && [ "$FAST_PATH_ENABLED" = "true" ]; then RESULT="FAST_PATH"; fi
+
+{
+  echo "$RESULT"
+  echo
+  echo "# Decision del Human-Gate"
+  echo
+  echo "- Fecha: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "- Job: ${JOB_ID}"
+  echo "- Base: ${BASE_OK:-n/d} | Round evaluado: ${LAST_ROUND:-n/d}"
+  echo "- fast_path.enabled: ${FAST_PATH_ENABLED}"
+  echo
+  echo "## Riesgos detectados"
+  if [ "${#RISKS[@]}" -eq 0 ]; then echo "- Ninguno."; else
+    for i in "${!RISKS[@]}"; do echo "- ${RISKS[$i]}: ${EVID[$i]}"; done
+  fi
+  echo
+  if [ "$RESULT" = "NEEDS_HUMAN" ]; then
+    echo "Requiere revision humana: abrir PR en borrador con este resumen y esperar aprobacion."
   else
-    RESULT="NEEDS_HUMAN"
+    echo "FAST_PATH: cumple todos los criterios. Aun asi se exige CI verde y branch protection."
   fi
-fi
+} > "${JOB_DIR}/human.md"
 
-# Escribir human.md
-cat > "${JOB_DIR}/human.md" << EOFHUMAN
-# Decisión del Human-Gate
-
-Fecha: ${NOW}
-Job: ${JOB_ID}
-
-## Resultado
-
-${RESULT}
-
-## Riesgos detectados
-
-EOFHUMAN
-
-if [ ${#RISKS[@]} -gt 0 ]; then
-  for i in "${!RISKS[@]}"; do
-    echo "- ${RISKS[$i]}: ${EVIDENCES[$i]}" >> "${JOB_DIR}/human.md"
-  done
-else
-  echo "- Ninguno. Todos los criterios de riesgo pasaron." >> "${JOB_DIR}/human.md"
-fi
-
-cat >> "${JOB_DIR}/human.md" << EOFHUMAN
-
-## Evidencias
-
-EOFHUMAN
-
-if [ ${#EVIDENCES[@]} -gt 0 ]; then
-  for i in "${!EVIDENCES[@]}"; do
-    echo "- ${EVIDENCES[$i]}" >> "${JOB_DIR}/human.md"
-  done
-else
-  echo "- Sin evidencias de riesgo." >> "${JOB_DIR}/human.md"
-fi
-
-cat >> "${JOB_DIR}/human.md" << EOFHUMAN
-
-## Checklist de revisión
-
-- [ ] Verificar que el diff no excede ${MAX_DIFF_LINES} líneas
-- [ ] Confirmar que no hay cambios en auth, pagos o datos personales
-- [ ] Verificar que no hay migraciones de base de datos
-- [ ] Confirmar que no hay cambios en CI/infra/despliegue
-- [ ] Revisar que no hay dependencias nuevas sin aprobación
-- [ ] Verificar que los tests no se modificaron solo para hacerlos pasar
-- [ ] Confirmar scores de revisores >= ${MIN_SCORE}
-- [ ] Verificar que no hay desacuerdo entre revisores
-
-## Decisión
-
-**${RESULT}**
-
-Si es NEEDS_HUMAN: preparar resumen claro con evidencias y obtener aprobación humana antes de merge.
-Si es FAST_PATH: solo si fast_path.enabled=true, CI verde y branch protection lo permiten.
-EOFHUMAN
-
-echo "Human-gate: ${RESULT}"
-echo "Escrito en: ${JOB_DIR}/human.md"
+echo "Human-gate: ${RESULT} (${#RISKS[@]} riesgos) -> ${JOB_DIR}/human.md"
 exit 0

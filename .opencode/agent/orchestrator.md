@@ -3,6 +3,26 @@ description: Orquesta el pipeline completo de la AI Factory: intake -> spec -> b
 mode: primary
 model: opencode/nemotron-3.5-super-vl-free
 temperature: 0.2
+permission:
+  edit:
+    "*": deny
+    "factory/jobs/*/job.json": allow
+    "factory/jobs/*/trace.md": allow
+    "factory/jobs/*/gate.md": allow
+  bash:
+    "*": ask
+    "git worktree*": allow
+    "git status*": allow
+    "git log*": allow
+    "git diff*": allow
+    "bash 01-TOOLS/*": allow
+    "node 01-TOOLS/*": allow
+    "node factory/scripts/*": allow
+    "bash .hooks/*": allow
+    "gh pr create*": allow
+    "gh pr view*": allow
+    "gh issue view*": allow
+  webfetch: ask
 ---
 
 # Agente: orchestrator

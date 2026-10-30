@@ -19,12 +19,12 @@ Ejecuta la AI Software Factory completa siguiendo la arquitectura del video de E
 
 1. **Intake** — normaliza Sentry / GitHub Issue / tarea manual a `factory/jobs/<id>/input.md`
 2. **Spec Writer** — genera `spec.md` + `tasks.md` (SDD), consulta `02-DOCS/`
-3. **Builder** — TDD por tarea (test rojo → código → verde), worktree desde main
-4. **Gate determinista** — `01-TOOLS/checks.sh`; si falla, vuelve al builder
+3. **Builder** — antes: `bash .hooks/spec-first-gate.sh <job-id>`. TDD por tarea (test rojo → código → verde), worktree desde main
+4. **Gate determinista** — `bash 01-TOOLS/checks.sh <job-id>` (escribe `gate.md` con `GATE: PASS|FAIL` y sale con código != 0 si falla); si falla, vuelve al builder SIN lanzar reviewers
 5. **4 Revisores en paralelo** — security, ux, ui, code (cada uno deja `review-<x>.md`)
 6. **Aprobador** — `decision.md` (APPROVE / CHANGES / ESCALATE); bucle al builder si CHANGES
-7. **Decisor Humano** — `human.md` (FAST_PATH / NEEDS_HUMAN)
-8. **Output** — PR borrador o merge (si fast_path habilitado)
+7. **Decisor Humano** — `bash 01-TOOLS/risk.sh <job-id>` (determinista, usa `git diff` real; línea 1 de `human.md` = FAST_PATH | NEEDS_HUMAN). El agente human-gate solo redacta el resumen
+8. **Output** — `gh pr create --draft`. Ningún agente hace push ni merge (lo bloquean el plugin factory-guard, los permisos y los git hooks); el merge lo hace un humano
 9. **Memory Curator** — actualiza `02-DOCS/wiki/` y `trace.md`
 
 ## Archivos por job (`factory/jobs/<id>/`)
@@ -47,5 +47,5 @@ Ejecuta la AI Software Factory completa siguiendo la arquitectura del video de E
 - Los 4 revisores se lanzan en paralelo
 - Cualquier valor ambiguo → CHANGES / ESCALATE / NEEDS_HUMAN (lado seguro)
 - Si `Surface: none`, reviewer-ux y reviewer-ui devuelven `PASS (n/a)` pero siempre se lanzan
-- No push a main salvo fast_path habilitado explícitamente
+- Los agentes nunca hacen push ni merge; solo abren PR en borrador. `fast_path` está desactivado por defecto
 - Cada job deja traza completa y auditable

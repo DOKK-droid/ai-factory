@@ -3,6 +3,19 @@ description: Consolida los 4 informes de revisión y el PR en decision.md
 mode: subagent
 model: opencode/deepseek-v4-flash-free
 temperature: 0.2
+permission:
+  edit:
+    "*": deny
+    "factory/jobs/*/decision.md": allow
+  bash:
+    "*": deny
+    "git diff*": allow
+    "git log*": allow
+    "git status*": allow
+    "git show*": allow
+    "grep *": allow
+    "rg *": allow
+  webfetch: deny
 ---
 
 # Agente: approver
