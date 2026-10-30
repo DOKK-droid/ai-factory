@@ -19,6 +19,7 @@ permission:
     "node 01-TOOLS/*": allow
     "node factory/scripts/*": allow
     "bash .hooks/*": allow
+    "git push -u origin factory/*": allow
     "gh pr create*": allow
     "gh pr view*": allow
     "gh issue view*": allow

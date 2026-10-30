@@ -30,9 +30,14 @@ const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh']);
 const ENV_OK = new Set(['ls', 'stat', 'test', '[', 'echo']);
 const WRITE_TOOLS = new Set(['edit', 'write', 'patch', 'multiedit', 'apply_patch']);
 const READ_TOOLS = new Set(['read', 'grep', 'glob', 'list']);
-const ENV_FILE_RE = /(^|[\\/])\.env(\.[^\\/\s]+)?$/;
+const ENV_FILE_RE = /(^|[\\/])\.env(\.[^\\/\s]+)?$|[^\\/\s]\.env$/;
 const ENV_SAFE_RE = /\.(example|sample|template)$/;
 const MAX_DEPTH = 6;
+
+/** Unicas ramas que un agente puede subir: factory/<job-id>[/...] (sin `..`). Nunca main/master. */
+export const AGENT_BRANCH_RE = /^factory\/(?!.*\.\.)[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+const PUSH_OK_FLAGS = new Set(['-u', '--set-upstream', '-q', '--quiet', '-v', '--verbose', '--porcelain', '--progress', '--no-progress']);
+const REMOTE_RE = /^[A-Za-z0-9._-]+$/;
 
 const ok = () => ({ blocked: false });
 const block = (reason) => ({ blocked: true, reason });
@@ -125,12 +130,34 @@ function gitSubcommand(args) {
   return { sub: null, rest: [] };
 }
 
+function classifyPush(rest) {
+  const hint = 'Un agente solo puede ejecutar: git push [-u] <remoto> factory/<job-id>';
+  const pos = [];
+  for (const a of rest) {
+    if (a.startsWith('-')) {
+      if (!PUSH_OK_FLAGS.has(a)) return block(`git push con la opcion ${a} esta prohibido. ${hint}`);
+      continue;
+    }
+    pos.push(a);
+  }
+  if (pos.length !== 2) return block(`git push sin remoto y rama explicitos (o con varias ramas) esta prohibido. ${hint}`);
+  const [remote, ref] = pos;
+  if (!REMOTE_RE.test(remote)) return block(`El remoto "${remote}" no es un nombre simple (URLs prohibidas). ${hint}`);
+  const parts = ref.split(':');
+  if (parts.length > 2) return block(`Refspec invalido. ${hint}`);
+  const [src, dst] = parts.length === 2 ? parts : [ref, ref];
+  if (!AGENT_BRANCH_RE.test(dst) || !(src === 'HEAD' || AGENT_BRANCH_RE.test(src))) {
+    return block(`git push solo se permite a ramas factory/<job-id>; "${ref}" no cumple. Nunca a main/master. ${hint}`);
+  }
+  return ok();
+}
+
 function classifyGit(args) {
   const { sub, rest } = gitSubcommand(args);
   if (!sub) return ok();
   if (rest.includes('--no-verify')) return block('--no-verify esta prohibido (salta los hooks de proteccion).');
   switch (sub) {
-    case 'push': return block('git push esta prohibido para agentes. Abre un PR en borrador y espera aprobacion humana.');
+    case 'push': return classifyPush(rest);
     case 'merge': return block('git merge esta prohibido para agentes. El merge lo hace un humano.');
     case 'update-ref':
     case 'filter-branch': return block(`git ${sub} esta prohibido.`);
@@ -188,6 +215,10 @@ function classifyGh(args) {
 }
 
 function classifySimple(tokens, raw, opts, depth) {
+  const head = tokens.filter((a) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(a));
+  if (head[0] && head[0].split('/').pop() === 'env' && head.slice(1).every((a) => a.startsWith('-'))) {
+    return block('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
+  }
   const t = stripWrappers(tokens);
   if (!t.length) return ok();
   const cmd = t[0].split('/').pop();
@@ -205,6 +236,12 @@ function classifySimple(tokens, raw, opts, depth) {
     const rec = /[rR]/.test(flags) || long.includes('--recursive');
     const force = /f/.test(flags) || long.includes('--force');
     if (rec && force) return block('rm -rf esta prohibido.');
+  }
+  if (['printenv', 'export'].includes(cmd) || (cmd === 'set' && t.length === 1)) {
+    return block('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
+  }
+  if (/\$\{?(GH_TOKEN|GITHUB_TOKEN|GITHUB_PAT|[A-Z_]*API_KEY|[A-Z_]*SECRET[A-Z_]*)\b/.test(raw) || /\/proc\/[^\s]*environ/.test(raw)) {
+    return block('Leer o imprimir tokens/secretos del entorno esta prohibido.');
   }
   if (!ENV_OK.has(cmd) && t.slice(1).some(isEnvFile)) return block('Leer o copiar archivos .env esta prohibido.');
 
