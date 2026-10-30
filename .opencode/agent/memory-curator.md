@@ -3,6 +3,20 @@ description: Actualiza el Brain (02-DOCS/wiki/) y trace.md al cerrar cada job
 mode: subagent
 model: opencode/deepseek-v4-flash-free
 temperature: 0.2
+permission:
+  edit:
+    "*": deny
+    "02-DOCS/wiki/*": allow
+    "factory/jobs/*/trace.md": allow
+  bash:
+    "*": deny
+    "git diff*": allow
+    "git log*": allow
+    "git status*": allow
+    "git show*": allow
+    "grep *": allow
+    "rg *": allow
+  webfetch: deny
 ---
 
 # Agente: memory-curator

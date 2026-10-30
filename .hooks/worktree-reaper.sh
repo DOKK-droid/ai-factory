@@ -1,21 +1,18 @@
-# Hook: worktree-reaper
-# Limpia worktrees huorfanos despues de cerrar un job
-# Ubicado en: .hooks/worktree-reaper.sh
-
 #!/usr/bin/env bash
+# worktree-reaper: limpia la worktree de un job cerrado. NO borra trabajo sin commitear
+# salvo FACTORY_FORCE=1. Nunca toca la worktree principal. Uso: worktree-reaper.sh <job-id>
 set -euo pipefail
-
 JOB_ID="${1:?Falta ID de job}"
-
-# Listar worktrees y buscar los asociados al job
-WT_LIST=$(git worktree list 2>/dev/null || true)
-
-if echo "${WT_LIST}" | grep -q "${JOB_ID}"; then
-  echo "Limpiando worktree asociado al job ${JOB_ID}..."
-  git worktree remove --force "factory/worktrees/${JOB_ID}" 2>/dev/null || true
-  echo "OK: Worktree limpiado."
-else
-  echo "No hay worktree huorfano para el job ${JOB_ID}."
-fi
-
-exit 0
+MAIN="$(git rev-parse --show-toplevel)"
+FOUND=0
+FF=""; [ "${FACTORY_FORCE:-0}" = "1" ] && FF="--force"
+while IFS= read -r wt; do
+  [ "$wt" = "$MAIN" ] && continue
+  case "$wt" in *"$JOB_ID"*) ;; *) continue ;; esac
+  FOUND=1
+  if [ "${FACTORY_FORCE:-0}" != "1" ] && [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
+    echo "AVISO: ${wt} tiene cambios sin commitear; no se borra (usa FACTORY_FORCE=1)." >&2; continue
+  fi
+  git worktree remove $FF "$wt" && echo "OK: worktree ${wt} eliminada."
+done < <(git worktree list --porcelain | sed -n 's/^worktree //p')
+[ "$FOUND" -eq 1 ] || echo "No hay worktree para el job ${JOB_ID}."

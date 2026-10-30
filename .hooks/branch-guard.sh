@@ -1,21 +1,11 @@
-# Hook: branch-guard
-# Protege main y exige worktree limpio desde main
-# Ubicado en: .hooks/branch-guard.sh
-
 #!/usr/bin/env bash
+# branch-guard: protege main/master. Uso: branch-guard.sh [rama]  (sin arg: rama actual)
 set -euo pipefail
-
-BRANCH="${1:?Falta nombre de branch}"
-
-if [ "${BRANCH}" = "main" ] || [ "${BRANCH}" = "master" ]; then
-  echo "ERROR: No se permite trabajar directamente sobre ${BRANCH}. Usar worktree/branch propia."
-  exit 1
-fi
-
-# Verificar que no haya cambios sin commitear en main
-if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-  echo "WARN: Hay cambios sin commitear. Se recomienda hacer stash o commit antes de continuar."
-fi
-
-echo "OK: Branch ${BRANCH} autorizada para worktree."
-exit 0
+BRANCH="${1:-$(git symbolic-ref --short -q HEAD || echo '')}"
+case "$BRANCH" in
+  main|master)
+    echo "ERROR: no se permite trabajar directamente sobre ${BRANCH}. Usa una rama o worktree propia." >&2
+    exit 1 ;;
+  "") echo "ERROR: no pude determinar la rama (HEAD desacoplado)." >&2; exit 1 ;;
+esac
+echo "OK: rama ${BRANCH} autorizada."
