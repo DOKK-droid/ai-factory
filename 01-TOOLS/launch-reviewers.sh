@@ -26,7 +26,7 @@ set -uo pipefail
 JOB_ID="${1:?Uso: bash 01-TOOLS/launch-reviewers.sh <job-id> <round>}"
 ROUND="${2:-1}"
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
-TIMEOUT_SECS="${REVIEW_TIMEOUT_SECS:-600}"
+TIMEOUT_SECS="${REVIEW_TIMEOUT_SECS:-36000}"
 
 # Rutas construidas dinámicamente
 A_DIR=".opencode"; B_DIR="agent"; AGENT_DIR="${A_DIR}/${B_DIR}"

@@ -239,3 +239,11 @@ Justificacion:
 - 300 segundos era insuficiente y provocaba falsos negativos (revisor marcado como fallido por timeout cuando en realidad estaba procesando).
 - 600 segundos da margen suficiente sin bloquear el pipeline indefinidamente.
 Para ajustar: export REVIEW_TIMEOUT_SECS=900 (15 min) si se sabe que los modelos estan particularmente lentos en un momento dado.
+
+### Actualizacion de timeout (10 horas)
+El timeout por defecto se ajusto a 36000 segundos (10 horas) por revisor.
+Justificacion:
+- Chats individuales de revision pueden tardar 40 minutos o mas por cuestiones tecnicas del equipo y de los modelos gratuitos.
+- En la factory, con 4 revisores en paralelo y diffs complejos, el tiempo puede extenderse aun mas.
+- 10 horas da margen suficiente para cualquier demora sin bloquear el pipeline indefinidamente.
+Para ajustar: export REVIEW_TIMEOUT_SECS=72000 (20 horas) si se requiere mas margen.
