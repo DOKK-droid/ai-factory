@@ -183,3 +183,50 @@ El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con t
 - Pendiente: ejecutar `npm run factory:apply-models` y completar el A/B con glm y mimo si se desea mayor confianza.
 
 ## Paso 6: Verificación en vivo — pendiente
+## ADR-007: Lanzamiento robusto de los 4 revisores en paralelo
+Fecha: 2026-10-30
+Estado: Aprobado
+
+### Contexto
+El punto 4 del pipeline exige lanzar los 4 revisores (security, ux, ui, code) en paralelo.
+Sin embargo, las invocaciones vía opencode run pueden colgarse (timeout, modelo no responde, procesos zombies).
+Además, --pure --auto es necesario para evitar prompts interactivos que bloqueen la ejecución sin interfaz.
+
+### Decisión
+Se crean dos scripts en 01-TOOLS/:
+1. launch-reviewers.sh <job-id> <round>:
+   - Limpia procesos opencode zombies previos (pkill -f "opencode run").
+   - Lee spec.md y build.md del job para construir el prompt de cada revisor.
+   - Extrae el modelo de cada archivo de agente (ya aplicado por factory:apply-models).
+   - Lanza los 4 revisores EN PARALELO (background jobs + wait).
+   - Cada revisor se ejecuta con timeout --signal=KILL y --pure --auto.
+   - Verifica que cada review-<x>.md tenga VERDICT: en línea 1 y SCORE: en línea 2.
+   - Limpia zombies al finalizar.
+   - Retorna código 0 si los 4 son válidos; código 1 si falló alguno.
+2. validate-artifacts.sh <job-id> <round>:
+   - Valida que cada review-<x>.md tenga VERDICT: válido en línea 1 y SCORE: en línea 2.
+   - Valida que decision.md tenga APPROVE / CHANGES / ESCALATE en línea 1.
+   - Cualquier valor ambiguo → lado seguro (CHANGES / ESCALATE / NEEDS_HUMAN).
+
+### Flujo de uso en el paso 4 del pipeline
+bash 01-TOOLS/launch-reviewers.sh <job-id> <round>
+bash 01-TOOLS/validate-artifacts.sh <job-id> <round>
+
+### Modelos por revisor (según ADR-006)
+| Revisor | Modelo | Tier |
+|---------|--------|------|
+| reviewer-security | opencode/deepseek-v4.1-flash-free | sonnet |
+| reviewer-ux | opencode/glm-5.3-flash-free | sol |
+| reviewer-ui | opencode/glm-5.3-flash-free | sol |
+| reviewer-code | opencode/nemotron-3.5-super-vl-free | opus |
+
+### Alternativas consideradas
+- Lanzar revisores secuencialmente: Rechazado. El punto 4 exige paralelismo.
+- Sin timeout: Rechazado. Un revisor colgado bloquearía todo el pipeline.
+- Sin --pure --auto: Rechazado. En CI sin interfaz, los prompts ask se quedan esperando para siempre.
+
+### Consecuencias
+- Los 4 revisores se lanzan en paralelo con tiempo acotado.
+- Ningún revisor puede bloquear el pipeline indefinidamente.
+- El formato de salida se valida automáticamente antes de pasar al approver.
+- Los procesos zombies se limpian antes y después de cada lanzamiento.
