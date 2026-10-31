@@ -71,3 +71,30 @@ El video muestra un "camino rápido" donde el código va directo a main. En esta
 ### Consecuencias
 - Todo PR se deja en borrador (`gh pr create --draft`) hasta aprobación humana.
 - `ship-guard.sh` bloquea merge si no existe `human.md` con `FAST_PATH`.
+
+## ADR-004: Skills en una sola copia y modelo del approver provisional
+
+Fecha: 2026-10-30
+Estado: Aprobado
+
+### Contexto
+`code-review`, `receiving-code-review` y `test-driven-development` existían dos veces: versión completa en `.agents/skills/` y versión resumida en `03-SKILLS/`. Dos copias con el mismo nombre confunden qué se carga y gastan contexto. Además, la configuración de la factory movió `approver` y `human-gate` a `sonnet` (deepseek) para decorrelacionar, pero `reviewer-code` usa el mismo modelo y el A/B que lo justificaría (paso 7 de PATCH_INSTRUCCIONES) aún no se ha ejecutado.
+
+### Prueba en vivo
+Se inspeccionó desde qué ruta carga OpenCode las skills. Todas las referencias del repo (configs de agente, `tests/factory-smoke-test.sh`, README, `03-SKILLS/orient/SKILL.md`) apuntan a `03-SKILLS/`. `.agents/skills/` no está referenciado en ningún lado y `~/.config/opencode/skills/` solo tiene `chord-detection-accuracy` (no relacionado). Conclusión: `03-SKILLS/` es el directorio canónico.
+
+### Decisión
+- Se conserva una sola copia de cada skill en `03-SKILLS/` (canónica, con metadatos de factory: `tags`, `recommends`, `profiles`, `origin`).
+- Se borran las duplicadas de `.agents/skills/`: `code-review`, `receiving-code-review`, `test-driven-development`.
+- Se conserva `.agents/skills/differential-review` (no está duplicado; sí referenciado en `skills-lock.json`, reviewer-security y orient).
+- Se borra la carpeta vacía con typo `03-SILLS/`.
+- Se borra `patch-refactor/` (idéntica a `PATCH_INSTRUCCIONES.md`).
+- Modelo del approver: `approver = sonnet`, `human-gate = sonnet`, `reviewer-code = sonnet`. Se mantiene **provisional** hasta ejecutar el A/B real (paso 7: `tests/ab/run-ab.mjs` modo approver y reviewer) y registrar el resultado en ADR-006. Mientras tanto, `fast_path` permanece desactivado.
+
+### Alternativas consideradas
+- Mantener ambas copias: Rechazado. Duplicidad de nombre y contexto.
+- Elegir `.agents/skills/` como canónica: Rechazado. Ninguna referencia del repo apunta allí; rompería configs de agente y smoke test.
+
+### Consecuencias
+- Un solo origen de verdad para skills: `03-SKILLS/`.
+- La elección final del modelo del approver queda pendiente del A/B; si ningún modelo gratuito cumple los criterios, se usa el mejor disponible y `fast_path` se deja apagado.
