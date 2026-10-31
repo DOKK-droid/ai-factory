@@ -151,3 +151,35 @@ Editar `factory/config.json` con el nuevo bloque `roles` y corregir el tier `son
 - Todos los agentes de la factory responden (ningún modelo inexistente).
 - El approver puede validar independientemente las reviews de reviewer-code (modelo distinto).
 - `fast_path` sigue desactivado hasta que el A/B valide al approver.
+
+## ADR-006: Resultado A/B del approver (paso 7)
+
+Fecha: 2026-10-30
+Estado: Aprobado
+
+### Contexto
+Se ejecutó `tests/ab/run-ab.mjs --mode approver --runs 5` con 4 modelos gratuitos contra dos ramas: `cand-flawed` (3 fallos intencionados) y `cand-clean` (debería aprobarse).
+
+### Resultados
+| Modelo | flawed (no aprueba) | clean (aprueba) | fallos detectados | formato línea 1 |
+|--------|-------------------|-----------------|-------------------|-----------------|
+| nemotron-3.5-super-vl-free | 5/5 OK | 0/5 (fixture no es limpio) | 2/3 (sql_injection, tautology_test) | ✅ |
+| deepseek-v4.1-flash-free | 5/5 OK | 0/5 (fixture no es limpio) | 2/3 (sql_injection, tautology_test) | ✅ |
+| glm-5.3-flash-free | — (timeout) | — | — | — |
+| mimo-v2.6-flash-free | — (timeout) | — | — | — |
+
+### Hallazgo
+El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con tests triviales; no hay rate limit, consultas parametrizadas ni búsqueda por email). Los modelos rechazan correctamente porque el diff no cumple el spec. Los modelos funcionan bien; el problema es el fixture.
+
+### Decisión
+- Usar `deepseek-v4.1-flash-free` como approver (ya configurado en tier `sonnet`).
+- Familia distinta al builder (nemotron/opus): decorrelación real ✅
+- `fast_path` permanece desactivado (ningún modelo aprueba clean ≥ 80 % debido al fixture defectuoso).
+- No se "arregla" con prompts (regla del paso 7 punto 7).
+
+### Acción
+- `factory/config.json` ya actualizado (sonnet → deepseek-v4.1-flash-free, reviewer-code → opus, spec-writer → sol, etc.).
+- `npm test` → 140 tests OK.
+- Pendiente: ejecutar `npm run factory:apply-models` y completar el A/B con glm y mimo si se desea mayor confianza.
+
+## Paso 6: Verificación en vivo — pendiente
