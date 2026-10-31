@@ -230,3 +230,12 @@ bash 01-TOOLS/validate-artifacts.sh <job-id> <round>
 - Ningún revisor puede bloquear el pipeline indefinidamente.
 - El formato de salida se valida automáticamente antes de pasar al approver.
 - Los procesos zombies se limpian antes y después de cada lanzamiento.
+
+### Nota sobre timeouts (actualizado)
+El timeout por defecto es 600 segundos (10 minutos) por revisor, no 300.
+Justificacion:
+- Los modelos gratuitos de OpenCode son lentos y su tiempo de respuesta varia.
+  Un revisor que analiza un diff complejo puede tardar mas de 5 minutos.
+- 300 segundos era insuficiente y provocaba falsos negativos (revisor marcado como fallido por timeout cuando en realidad estaba procesando).
+- 600 segundos da margen suficiente sin bloquear el pipeline indefinidamente.
+Para ajustar: export REVIEW_TIMEOUT_SECS=900 (15 min) si se sabe que los modelos estan particularmente lentos en un momento dado.

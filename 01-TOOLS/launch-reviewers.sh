@@ -4,6 +4,10 @@
 #
 # Uso: bash 01-TOOLS/launch-reviewers.sh <job-id> <round>
 #
+# Variables de entorno:
+#   OPENCODE_BIN        ruta al binario opencode (default: opencode)
+#   REVIEW_TIMEOUT_SECS timeout por revisor en segundos (default: 600 = 10 min)
+#
 # Qué hace:
 #   1. Limpia procesos opencode zombies previos.
 #   2. Lee spec.md y build.md del job para construir el prompt de cada revisor.
@@ -22,7 +26,7 @@ set -uo pipefail
 JOB_ID="${1:?Uso: bash 01-TOOLS/launch-reviewers.sh <job-id> <round>}"
 ROUND="${2:-1}"
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
-TIMEOUT_SECS="${REVIEW_TIMEOUT_SECS:-300}"
+TIMEOUT_SECS="${REVIEW_TIMEOUT_SECS:-600}"
 
 # Rutas construidas dinámicamente
 A_DIR=".opencode"; B_DIR="agent"; AGENT_DIR="${A_DIR}/${B_DIR}"
@@ -30,6 +34,8 @@ F_DIR="factory"; J_DIR="jobs"; JOB_DIR="${F_DIR}/${J_DIR}/${JOB_ID}"
 ROUND_DIR="${JOB_DIR}/round-${ROUND}"
 
 mkdir -p "$ROUND_DIR"
+
+echo "=== Lanzando 4 revisores en paralelo (job=${JOB_ID}, round=${ROUND}, timeout=${TIMEOUT_SECS}s) ==="
 
 # ── 1. Limpiar zombies previos ──────────────────────────────────────────────
 pkill -f "opencode run" 2>/dev/null || true
@@ -51,6 +57,7 @@ launch_reviewer() {
   local agent_file="${AGENT_DIR}/reviewer-${role}.md"
   local review_file="${ROUND_DIR}/review-${role}.md"
   local stdout_file="${ROUND_DIR}/${role}.stdout"
+  local start_time end_time elapsed
 
   # Extraer modelo del frontmatter del agente
   local model=""
@@ -77,10 +84,15 @@ Reglas de salida:
 - Luego los hallazgos y recomendaciones.
 No uses herramientas, no edites archivos, solo escribe el informe."
 
+  start_time=$(date +%s)
+
   # Lanzar con timeout, --pure --auto (sin prompts interactivos)
   timeout --signal=KILL "$TIMEOUT_SECS" "$OPENCODE_BIN" run --pure --auto \
     --agent "reviewer-${role}" --model "$model" "$prompt" \
     > "$stdout_file" 2>&1 || true
+
+  end_time=$(date +%s)
+  elapsed=$((end_time - start_time))
 
   # Verificar formato del review
   if [ -f "$review_file" ]; then
@@ -89,18 +101,18 @@ No uses herramientas, no edites archivos, solo escribe el informe."
     second_line=$(sed -n '2p' "$review_file" | tr -d '\r')
     if echo "$first_line" | grep -qE "^VERDICT:"; then
       if echo "$second_line" | grep -qE "^SCORE:"; then
-        echo "OK: reviewer-${role} -> ${first_line} | ${second_line}"
+        echo "OK: reviewer-${role} -> ${first_line} | ${second_line} (${elapsed}s)"
         return 0
       else
-        echo "WARN: reviewer-${role} tiene VERDICT pero no SCORE en línea 2"
+        echo "WARN: reviewer-${role} tiene VERDICT pero no SCORE en línea 2 (${elapsed}s)"
         return 1
       fi
     else
-      echo "WARN: reviewer-${role} no tiene VERDICT en línea 1 (tiene: ${first_line})"
+      echo "WARN: reviewer-${role} no tiene VERDICT en línea 1 (tiene: ${first_line}) (${elapsed}s)"
       return 1
     fi
   else
-    echo "FAIL: reviewer-${role} no produjo ${review_file}"
+    echo "FAIL: reviewer-${role} no produjo ${review_file} (${elapsed}s)"
     return 1
   fi
 }
