@@ -98,3 +98,56 @@ Se inspeccionó desde qué ruta carga OpenCode las skills. Todas las referencias
 ### Consecuencias
 - Un solo origen de verdad para skills: `03-SKILLS/`.
 - La elección final del modelo del approver queda pendiente del A/B; si ningún modelo gratuito cumple los criterios, se usa el mejor disponible y `fast_path` se deja apagado.
+
+## ADR-005: Corrección de modelos gratuitos y asignación de roles
+
+Fecha: 2026-10-30
+Estado: Aprobado (pendiente aplicación humana en factory/config.json)
+
+### Contexto
+El tier `sonnet` apuntaba a `opencode/deepseek-v4-flash-free`, un modelo que **no existe** en OpenCode (sugiere `deepseek-v4.1-flash-free`). Como consecuencia, reviewer-code, approver, human-gate, memory-curator e intake no podían responder ("Model not found"). Además, reviewer-code y approver compartían el mismo modelo, rompiendo la decorrelación de errores que justifica el A/B del paso 7.
+
+### Prueba de campo
+Se invocó a cada modelo gratuito disponible y se le pidió autoevaluarse del 1 al 10 por rol de la fábrica:
+
+| Rol | nemotron (opus) | deepseek-v4.1 (candidato sonnet) | glm (sol) | mimo (astra) |
+|-----|----------------|----------------------------------|-----------|--------------|
+| spec-writer | 8 | 8 | **10** | 9 |
+| builder | **9** | **9** | 7 | 8 |
+| reviewer-code | **9** | **9** | 9 | 8 |
+| reviewer-security | 7 | 7 | 7 | 7 |
+| reviewer-ux | 6 | 5 | **7** | 6 |
+| reviewer-ui | 6 | 5 | **7** | 5 |
+| approver | 7 | 8 | **9** | 7 |
+| intake | 8 | 8 | 8 | **9** |
+| memory-curator | 7 | 7 | 8 | 8 |
+
+Datos web corroboran: nemotron = mejor razonamiento/código; deepseek-v4.1 = codificación óptima + cero retención; glm = equilibrio máximo y documentación; mimo = omnimodal/agente.
+
+### Decisión
+- Corregir tier `sonnet`: `opencode/deepseek-v4-flash-free` → `opencode/deepseek-v4.1-flash-free` (modelo que existe).
+- `reviewer-code` pasa a **opus** (nemotron) y `approver` se queda en **sonnet** (deepseek-v4.1): familias distintas, decorrelación real.
+- `spec-writer` pasa a **sol** (glm, 10 en spec-writer).
+- `reviewer-ui` pasa a **sol** (glm, 7 vs 5 de mimo).
+- `intake` pasa a **astra** (mimo, 9 en intake).
+- `memory-curator` pasa a **sol** (glm, 8).
+
+### Nuevos roles por tier
+| Tier | Modelo | Roles |
+|------|--------|-------|
+| opus | `opencode/nemotron-3.5-super-vl-free` | builder, orchestrator, reviewer-code |
+| sonnet | `opencode/deepseek-v4.1-flash-free` | approver, human-gate, reviewer-security, intake |
+| sol | `opencode/glm-5.3-flash-free` | spec-writer, reviewer-ux, reviewer-ui, memory-curator |
+| astra | `opencode/mimo-v2.6-flash-free` | (respaldo intake, memory-curator) |
+
+### Acción requerida (humano)
+Editar `factory/config.json` con el nuevo bloque `roles` y corregir el tier `sonnet`. Luego ejecutar `npm run factory:apply-models` y `npm test`, y finalmente el A/B del paso 7 para validar el approver.
+
+### Alternativas consideradas
+- Mantener `deepseek-v4-flash-free`: Rechazado. Modelo inexistente, agentes no responden.
+- Mantener reviewer-code y approver en el mismo modelo: Rechazado. Rompe la decorrelación de errores.
+
+### Consecuencias
+- Todos los agentes de la factory responden (ningún modelo inexistente).
+- El approver puede validar independientemente las reviews de reviewer-code (modelo distinto).
+- `fast_path` sigue desactivado hasta que el A/B valide al approver.
