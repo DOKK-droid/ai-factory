@@ -1,7 +1,7 @@
 ---
 description: Actualiza el Brain (02-DOCS/wiki/) y trace.md al cerrar cada job
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: opencode/glm-5.3-flash-free
 temperature: 0.2
 permission:
   edit:

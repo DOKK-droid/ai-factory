@@ -1,7 +1,7 @@
 ---
 description: Revisa consistencia visual, componentes, responsive y design system
 mode: subagent
-model: opencode/mimo-v2.6-flash-free
+model: opencode/glm-5.3-flash-free
 temperature: 0.3
 permission:
   edit:

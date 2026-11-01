@@ -92,12 +92,70 @@ export function tokenize(segment) {
   return tokens;
 }
 
-/** Contenido de $( ... ) y `...` (tambien dentro de comillas dobles). */
+/**
+ * Contenido de $( ... ) y `...` que SE EJECUTARIA: dentro de comillas dobles o sin comillas.
+ * En comillas simples no se ejecuta nada; un backtick escapado (\`) es texto literal.
+ */
 function extractSubstitutions(input) {
   const out = [];
-  for (const m of input.matchAll(/\$\(([^()]*)\)/g)) out.push(m[1]);
-  for (const m of input.matchAll(/`([^`]*)`/g)) out.push(m[1]);
+  let q = null;
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    if (q === "'") { if (c === "'") q = null; continue; }
+    if (c === '\\') { i++; continue; }
+    if (q === '"') { if (c === '"') { q = null; continue; } }
+    else if (c === "'") { q = "'"; continue; }
+    else if (c === '"') { q = '"'; continue; }
+    if (c === '`') {
+      const j = input.indexOf('`', i + 1);
+      if (j < 0) { out.push(input.slice(i + 1)); break; }
+      out.push(input.slice(i + 1, j)); i = j; continue;
+    }
+    if (c === '$' && input[i + 1] === '(') {
+      let d = 1; let j = i + 2;
+      while (j < input.length && d > 0) { if (input[j] === '(') d++; else if (input[j] === ')') d--; j++; }
+      out.push(input.slice(i + 2, d === 0 ? j - 1 : j)); i = j - 1;
+    }
+  }
   return out;
+}
+
+/**
+ * Separa los cuerpos de heredoc (<<EOF ... EOF) del resto del comando.
+ * El cuerpo es DATO (por ejemplo codigo JS), no una lista de comandos, salvo que lo reciba un shell
+ * (bash/sh/eval/source). Si el delimitador no va entre comillas, solo se ejecutan sus $( ) y backticks.
+ */
+function splitHeredocs(command) {
+  const lines = command.split('\n');
+  const out = [];
+  const bodies = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    out.push(line);
+    const pending = [];
+    const re = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+    let m;
+    while ((m = re.exec(line))) {
+      if (line[m.index - 1] === '<') continue; // here-string <<<
+      const pre = line.slice(0, m.index).split(/[;&|]/).pop() || '';
+      pending.push({ dash: m[1] === '-', quoted: m[2] !== '', delim: m[3], pre });
+    }
+    for (const h of pending) {
+      const body = [];
+      while (i + 1 < lines.length) {
+        i++;
+        const cand = h.dash ? lines[i].replace(/^\t+/, '') : lines[i];
+        if (cand === h.delim) break;
+        body.push(lines[i]);
+      }
+      const head = stripWrappers(tokenize(h.pre));
+      const recv = head.length ? head[0].split('/').pop() : '';
+      const text = body.join('\n');
+      if (SHELLS.has(recv) || ['eval', 'source', '.'].includes(recv)) bodies.push(text);
+      else if (!h.quoted) bodies.push(...extractSubstitutions(text));
+    }
+  }
+  return { text: out.join('\n'), bodies };
 }
 
 function stripWrappers(tokens) {
@@ -237,7 +295,7 @@ function classifySimple(tokens, raw, opts, depth) {
     const force = /f/.test(flags) || long.includes('--force');
     if (rec && force) return block('rm -rf esta prohibido.');
   }
-  if (['printenv', 'export'].includes(cmd) || (cmd === 'set' && t.length === 1)) {
+  if (cmd === 'printenv' || (cmd === 'export' && t.slice(1).every((a) => a === '-p')) || (cmd === 'set' && t.length === 1)) {
     return block('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
   }
   if (/\$\{?(GH_TOKEN|GITHUB_TOKEN|GITHUB_PAT|[A-Z_]*API_KEY|[A-Z_]*SECRET[A-Z_]*)\b/.test(raw) || /\/proc\/[^\s]*environ/.test(raw)) {
@@ -258,31 +316,49 @@ export function classifyBash(command, opts = {}, depth = 0) {
     return block('No pude leer el comando bash (formato de herramienta inesperado). Bloqueado por seguridad.');
   }
   if (depth > MAX_DEPTH) return block('Comando demasiado anidado. Bloqueado por seguridad.');
-  for (const inner of extractSubstitutions(command)) {
+  const { text, bodies } = splitHeredocs(command);
+  for (const inner of [...extractSubstitutions(text), ...bodies]) {
     const r = classifyBash(inner, opts, depth + 1);
     if (r.blocked) return r;
   }
-  for (const seg of splitSegments(command)) {
+  for (const seg of splitSegments(text)) {
     const r = classifySimple(tokenize(seg), seg, opts, depth);
     if (r.blocked) return r;
   }
   return ok();
 }
 
+/** Rutas que una herramienta de escritura va a modificar (no el contenido que escribe). */
+export function targetPaths(tool, args = {}) {
+  const paths = [];
+  for (const k of ['filePath', 'file_path', 'path', 'filename', 'file']) if (typeof args[k] === 'string') paths.push(args[k]);
+  if (Array.isArray(args.edits)) for (const e of args.edits) if (e && typeof e.filePath === 'string') paths.push(e.filePath);
+  for (const k of ['patchText', 'patch', 'input', 'diff']) {
+    if (typeof args[k] !== 'string') continue;
+    for (const m of args[k].matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s*(.+)$/gm)) paths.push(m[1].trim());
+    for (const m of args[k].matchAll(/^\*\*\* Move to:\s*(.+)$/gm)) paths.push(m[1].trim());
+    for (const m of args[k].matchAll(/^(?:---|\+\+\+) (?:[ab]\/)?(\S+)/gm)) if (m[1] !== '/dev/null') paths.push(m[1]);
+    for (const m of args[k].matchAll(/^diff --git a\/(\S+) b\/(\S+)/gm)) paths.push(m[1], m[2]);
+  }
+  return paths;
+}
+
 /** Herramientas que no son bash (read/edit/write/patch...). */
 export function classifyTool(tool, args = {}, opts = {}) {
   const name = String(tool || '').toLowerCase();
-  const blob = JSON.stringify(args || {});
   if (READ_TOOLS.has(name)) {
     const target = args.filePath || args.path || args.pattern || '';
     if (isEnvFile(target)) return block('Leer archivos .env esta prohibido.');
   }
   if (WRITE_TOOLS.has(name)) {
-    const target = args.filePath || args.path || '';
-    if (isEnvFile(target)) return block('Escribir archivos .env esta prohibido.');
-    if (!opts.allowProtected) {
-      const hit = PROTECTED_PATHS.find((p) => blob.includes(p));
-      if (hit) return block(`Modificar ${hit} esta prohibido para agentes (archivo protegido de la factory).`);
+    const paths = targetPaths(name, args);
+    if (!paths.length) return block(`No pude determinar que archivo modifica la herramienta ${name}. Bloqueado por seguridad.`);
+    for (const target of paths) {
+      if (isEnvFile(target)) return block('Escribir archivos .env esta prohibido.');
+      if (!opts.allowProtected) {
+        const hit = PROTECTED_PATHS.find((p) => target.includes(p));
+        if (hit) return block(`Modificar ${hit} esta prohibido para agentes (archivo protegido de la factory).`);
+      }
     }
   }
   return ok();
