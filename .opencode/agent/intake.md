@@ -1,7 +1,7 @@
 ---
 description: Normaliza Sentry / GitHub Issue / tarea manual a input.md dentro de factory/jobs/<id>/
 mode: subagent
-model: opencode/mimo-v2.6-flash-free
+model: opencode/deepseek-v4-flash-free
 temperature: 0.1
 permission:
   edit:

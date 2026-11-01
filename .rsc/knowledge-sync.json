@@ -1,31 +1,20 @@
 {
   "announced": true,
   "seenBy": {
-    "main": "fb3940cf0d98a53256aa186287b0994126ee1897",
-    "factory/job-e2e-001": "1272987035f569d27fb36d5dee6532446f87ded4",
-    "fix/guard-heredoc": "1272987035f569d27fb36d5dee6532446f87ded4"
+    "main": "fb3940cf0d98a53256aa186287b0994126ee1897"
   },
-  "waiting": {
-    "main": "1272987035f569d27fb36d5dee6532446f87ded4"
-  },
+  "waiting": {},
   "queue": [],
   "ours": [
     "4cd56dc471947450bc98549318efe2e51c9ec74c",
-    "8c1ed502d16e6f7dd4fdc600678257388a9a5bbf",
-    "b9fbc5c1b3ccb53ea99f9eafa8be3e4c1f5be08a",
-    "3f73d089c44d629ea04fb1d0062d2b627ea8a316",
-    "f69aaa84707e9fe34e99a362b5be74f86904f32f",
-    "4f09a334fcea79316e3a6478f81aa5aa2d97f04d",
-    "85eb4c58bd83fc9dcedd945b4c17e03f60196279",
-    "1272987035f569d27fb36d5dee6532446f87ded4",
-    "31f162818a1a22659362610a0bed24eb569b0df1"
+    "8c1ed502d16e6f7dd4fdc600678257388a9a5bbf"
   ],
   "notices": [],
   "clashes": [],
-  "lastFetch": 1793496432360,
+  "lastFetch": 1793331222609,
   "snap": {
-    "head": "30003b50695ad6ddaf602341099e22887a314a5d",
-    "commit": "31f162818a1a22659362610a0bed24eb569b0df1"
+    "head": "3e80d1f1f20e47bad4f048e28cf3859558197a3f",
+    "commit": "4cd56dc471947450bc98549318efe2e51c9ec74c"
   },
-  "head": "30003b50695ad6ddaf602341099e22887a314a5d"
+  "head": "fb3940cf0d98a53256aa186287b0994126ee1897"
 }

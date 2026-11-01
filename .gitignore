@@ -47,39 +47,3 @@ factory/worktrees/
 
 # --- Salidas de pruebas A/B ---
 tests/ab/out/
-
-# rsc local state (hooks, seals, logs) and managed skill links — machine-local
-.rsc/
-.worktrees/
-.opencode/rsc/orient
-.opencode/rsc/suggest
-.opencode/rsc/unslop
-.opencode/rsc/ftd
-.opencode/rsc/connect-tool
-.opencode/rsc/design
-.opencode/rsc/ux
-.opencode/rsc/tidy
-.opencode/rsc/analyze
-.opencode/rsc/automation-strategy
-.opencode/rsc/clarify
-.opencode/rsc/constitution
-.opencode/rsc/debug
-.opencode/rsc/decision-challenge
-.opencode/rsc/deprecation
-.opencode/rsc/fable-operator
-.opencode/rsc/harness
-.opencode/rsc/idea-refinement
-.opencode/rsc/implement
-.opencode/rsc/init
-.opencode/rsc/parallel
-.opencode/rsc/plan
-.opencode/rsc/review
-.opencode/rsc/sdd
-.opencode/rsc/sdd-init
-.opencode/rsc/ship
-.opencode/rsc/simplify-code
-.opencode/rsc/source-grounded-development
-.opencode/rsc/specify
-.opencode/rsc/tasks
-.opencode/rsc/verify
-.opencode/rsc/worktrees
