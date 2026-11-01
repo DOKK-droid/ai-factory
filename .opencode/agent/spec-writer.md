@@ -1,7 +1,7 @@
 ---
 description: Genera un Spec SDD completo consultando el Brain (02-DOCS/) antes de escribir nada
 mode: subagent
-model: opencode/nemotron-3.5-super-vl-free
+model: opencode/glm-5.3-flash-free
 temperature: 0.3
 permission:
   edit:
