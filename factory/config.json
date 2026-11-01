@@ -1,34 +1,28 @@
 {
   "tiers": {
     "opus": "opencode/nemotron-3.5-super-vl-free",
-    "sonnet": "opencode/deepseek-v4.1-flash-free",
+    "sonnet": "opencode/deepseek-v4-flash-free",
     "sol": "opencode/glm-5.3-flash-free",
-    "astra": "opencode/mimo-v2.6-flash-free",
-    "go-builder": "opencode-go/gpt-5.6-luna",
-    "go-approver": "opencode-go/claude-haiku-5-5",
-    "go-security": "opencode-go/grok-4.7"
+    "astra": "opencode/mimo-v2.6-flash-free"
   },
   "roles": {
-    "spec-writer": "sol",
-    "builder": "go-builder",
-    "reviewer-security": "go-security",
+    "spec-writer": "opus",
+    "builder": "opus",
+    "reviewer-security": "sol",
     "reviewer-ux": "sol",
-    "reviewer-ui": "sol",
-    "reviewer-code": "sol",
-    "approver": "go-approver",
-    "human-gate": "go-approver",
-    "memory-curator": "sol",
-    "intake": "astra",
+    "reviewer-ui": "astra",
+    "reviewer-code": "sonnet",
+    "approver": "sonnet",
+    "human-gate": "sonnet",
+    "memory-curator": "sonnet",
+    "intake": "sonnet",
     "orchestrator": "opus"
   },
   "fallback": {
-    "opus": "opencode/deepseek-v4.1-flash-free",
-    "sonnet": "opencode/deepseek-v4.1-flash-free",
-    "sol": "opencode/deepseek-v4.1-flash-free",
-    "astra": "opencode/deepseek-v4.1-flash-free",
-    "go-builder": "opencode/nemotron-3.5-super-vl-free",
-    "go-approver": "opencode/deepseek-v4.1-flash-free",
-    "go-security": "opencode/deepseek-v4.1-flash-free"
+    "opus": "opencode/deepseek-v4-flash-free",
+    "sonnet": "opencode/deepseek-v4-flash-free",
+    "sol": "opencode/deepseek-v4-flash-free",
+    "astra": "opencode/deepseek-v4-flash-free"
   },
   "max_rounds": 3,
   "max_diff_lines": 400,
