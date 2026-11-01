@@ -6,7 +6,7 @@
 |-------|-------|------|
 | constitution | `02-DOCS/wiki/sdd/constitution.md` | Principios no negociables de la AI Factory |
 | arquitectura | `02-DOCS/wiki/sdd/constitution.md` | Stack canon, calidad, convenciones, branching |
-| ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001, ADR-002, ADR-003) |
+| ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001, ADR-002, ADR-003, ADR-004) |
 | glosario | `02-DOCS/wiki/sdd/glossary.md` | Términos del proyecto |
 | lecciones por job | `02-DOCS/wiki/sdd/lessons/` | Lecciones aprendidas por job cerrado |
 | errores recurrentes | `02-DOCS/wiki/sdd/errors.md` | Errores recurrentes y cómo se resolvieron |
