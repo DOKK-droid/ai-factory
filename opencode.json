@@ -2,14 +2,6 @@
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "bash": {
-      "git commit": "allow",
-      "git commit *": "allow",
-      "git push": "deny",
-      "git push *": "deny",
-      "git push --force*": "deny",
-      "git push -f*": "deny",
-      "git push * --force*": "deny",
-      "git push * -f*": "deny",
       "git merge": "deny",
       "git merge *": "deny",
       "gh pr merge": "deny",
@@ -40,7 +32,6 @@
       "npx @ericrisco/rsc@latest *": "ask",
       "npx @ericrisco/rsc@3.6.0 *": "allow",
       "gh pr create": "allow",
-      "gh pr create *": "allow",
       "gh pr view": "allow",
       "gh pr view *": "allow",
       "gh auth status": "allow",
@@ -58,7 +49,16 @@
       "gh auth token*": "deny",
       "gh secret *": "deny",
       "gh repo delete*": "deny",
-      "git push -u origin factory/*": "allow"
+      "git push -u origin factory/*": "allow",
+      "git commit": "allow",
+      "git commit *": "allow",
+      "git push": "deny",
+      "git push *": "deny",
+      "gh pr create *": "allow",
+      "git push --force*": "deny",
+      "git push -f*": "deny",
+      "git push * --force*": "deny",
+      "git push * -f*": "deny"
     },
     "read": {
       "*": "allow",
