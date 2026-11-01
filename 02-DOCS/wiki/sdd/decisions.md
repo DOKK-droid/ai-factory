@@ -161,12 +161,12 @@ Estado: Aprobado
 Se ejecutó `tests/ab/run-ab.mjs --mode approver --runs 5` con 4 modelos gratuitos contra dos ramas: `cand-flawed` (3 fallos intencionados) y `cand-clean` (debería aprobarse).
 
 ### Resultados
-| Modelo | flawed (no aprueba) | clean (aprueba) | fallos detectados | formato línea 1 |
-|--------|-------------------|-----------------|-------------------|-----------------|
-| nemotron-3.5-super-vl-free | 5/5 OK | 0/5 (fixture no es limpio) | 2/3 (sql_injection, tautology_test) | ✅ |
-| deepseek-v4.1-flash-free | 5/5 OK | 0/5 (fixture no es limpio) | 2/3 (sql_injection, tautology_test) | ✅ |
-| glm-5.3-flash-free | — (timeout) | — | — | — |
-| mimo-v2.6-flash-free | — (timeout) | — | — | — |
+| Modelo | flawed (no aprueba) | clean (aprueba) | fallos detectados (de 3, media) | formato línea 1 |
+|--------|-------------------|-----------------|---------------------------------|-----------------|
+| nemotron-3.5-super-vl-free | 5/5 OK | 0/5 (fixture no es limpio) | 2.0 | 100 % |
+| deepseek-v4.1-flash-free | 5/5 OK | 0/5 (fixture no es limpio) | 2.0 | 100 % |
+| glm-5.3-flash-free | 5/5 OK | 0/5 (fixture no es limpio) | 2.4 | 100 % |
+| mimo-v2.6-flash-free | 5/5 OK | 0/5 (fixture no es limpio) | 2.4 | 80 % (2 UNKNOWN) |
 
 ### Hallazgo
 El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con tests triviales; no hay rate limit, consultas parametrizadas ni búsqueda por email). Los modelos rechazan correctamente porque el diff no cumple el spec. Los modelos funcionan bien; el problema es el fixture.
