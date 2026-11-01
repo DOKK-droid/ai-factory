@@ -44,4 +44,10 @@ Input → Spec Writer ←→ Brain → Builder ←→ Brain → [4 Revisores en 
 - Cada job deja traza en `factory/jobs/<id>/`
 - Todos los agentes leen `02-DOCS/` antes de actuar y escriben al terminar
 
+## Lanzadores de OpenCode
+
+- `./factory-agent` inicia una sesión del agente con el guard activo y usa la identidad Git `factory-agent`.
+- `./factory-maint` inicia una sesión de mantenimiento supervisada con acceso a archivos protegidos. Solo úsalo para cambios de configuración, permisos, guard, hooks o ramas de mantenimiento.
+- Una sesión del agente no debe modificar configuración o controles de seguridad.
+
 <!-- comentario de prueba -->
