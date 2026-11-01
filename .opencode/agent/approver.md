@@ -1,7 +1,7 @@
 ---
 description: Consolida los 4 informes de revisión y el PR en decision.md
 mode: subagent
-model: opencode-go/claude-haiku-5-5
+model: opencode/deepseek-v4-flash-free
 temperature: 0.2
 permission:
   edit:

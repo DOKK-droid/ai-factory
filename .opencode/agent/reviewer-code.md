@@ -1,7 +1,7 @@
 ---
 description: Revisa legibilidad, bugs, convenciones, arquitectura y cumplimiento TDD y cobertura
 mode: subagent
-model: opencode/glm-5.3-flash-free
+model: opencode/deepseek-v4-flash-free
 temperature: 0.2
 permission:
   edit:

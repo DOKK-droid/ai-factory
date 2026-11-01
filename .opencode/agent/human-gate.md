@@ -1,7 +1,7 @@
 ---
 description: Analiza riesgo y decide si el cambio puede ir solo o necesita revision humana
 mode: subagent
-model: opencode-go/claude-haiku-5-5
+model: opencode/deepseek-v4-flash-free
 temperature: 0.2
 permission:
   edit:

@@ -1,7 +1,7 @@
 ---
 description: Implementa el Spec usando TDD (test primero -> codigo) en worktree desde main
 mode: subagent
-model: opencode-go/gpt-5.6-luna
+model: opencode/nemotron-3.5-super-vl-free
 temperature: 0.2
 permission:
   edit:
