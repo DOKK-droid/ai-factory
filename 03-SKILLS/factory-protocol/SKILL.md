@@ -94,6 +94,40 @@ SCORE: <0.0-1.0>
 - <acción concreta>
 ```
 
+## Consulta del Brain por etapa
+
+El Brain (`02-DOCS/wiki/`) es la memoria persistente de la fábrica. Cada agente consulta las secciones relevantes antes de actuar. Solo `memory-curator` escribe en el Brain al final del job.
+
+| Etapa | Lee Brain | Escribe Brain | Secciones relevantes |
+|-------|-----------|---------------|---------------------|
+| Intake | ✅ | ❌ | `errors.md`, `incidents.md`, `glossary.md` |
+| Spec Writer | ✅ | ❌ | `constitution.md`, `decisions.md`, `glossary.md`, `lessons/` |
+| Builder | ✅ | ❌ | `constitution.md`, `errors.md`, `lessons/` |
+| Gate | ❌ | ❌ | — (determinista, no necesita contexto) |
+| reviewer-security | ✅ | ❌ | `incidents.md`, `errors.md` |
+| reviewer-code | ✅ | ❌ | `constitution.md`, `lessons/`, `errors.md` |
+| reviewer-ux | ✅ | ❌ | `lessons/` |
+| reviewer-ui | ✅ | ❌ | `lessons/` |
+| Approver | ✅ | ❌ | `decisions.md`, `lessons/`, `errors.md` |
+| Complexity | ✅ | ❌ | `incidents.md`, `errors.md` |
+| Risk (human-gate) | ✅ | ❌ | `decisions.md`, `constitution.md` |
+| Memory Curator | ❌ | ✅ | `decisions.md`, `lessons/`, `errors.md`, `incidents.md`, `trace.md` |
+
+### Flujo de consulta
+
+```
+intake → spec → builder → gate → 4 reviewers → approver → complexity → risk → output → memory-curator
+   ↓       ↓       ↓       —       ↓↓↓↓           ↓           ↓         ↓        —          ↓
+ Brain   Brain   Brain           Brain           Brain      Brain     Brain              Brain
+ (lee)   (lee)   (lee)           (lee)           (lee)      (lee)     (lee)            (ESCRIBE)
+```
+
+### Regla
+
+- **Antes de actuar:** cada agente lee las secciones relevantes del Brain.
+- **Al terminar:** solo `memory-curator` escribe en el Brain (ADRs, lessons, errors, incidents, trace).
+- Si un ADR contradice lo que se pide en el spec, el spec lo señala y el approver lo considera.
+
 ## Reglas de uso
 
 1. Cada agente lee este skill antes de escribir su archivo de salida.
@@ -101,3 +135,5 @@ SCORE: <0.0-1.0>
 3. Los 4 reviewers se lanzan en paralelo.
 4. Cualquier review con `CHANGES` devuelve al builder (bucle, máx. `max_rounds` definido en `factory/config.json`).
 5. Si `fast_path.enabled=false` (por defecto), todo trabajo requiere `NEEDS_HUMAN` o aprobación explícita antes de merge.
+6. Cada agente consulta el Brain (secciones relevantes) antes de actuar.
+7. Solo `memory-curator` escribe en el Brain al cerrar el job.
