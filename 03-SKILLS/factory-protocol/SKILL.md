@@ -94,40 +94,6 @@ SCORE: <0.0-1.0>
 - <acción concreta>
 ```
 
-
-## Consulta del Brain por etapa
-
-El Brain (`02-DOCS/wiki/`) es la memoria persistente de la fabrica. Cada agente consulta las secciones relevantes antes de actuar. Solo `memory-curator` escribe en el Brain al final del job.
-
-| Etapa | Lee Brain | Escribe Brain | Secciones relevantes |
-|-------|-----------|---------------|---------------------|
-| Intake | Si | No | `errors.md`, `incidents.md`, `glossary.md` |
-| Spec Writer | Si | No | `constitution.md`, `decisions.md`, `glossary.md`, `lessons/` |
-| Builder | Si | No | `constitution.md`, `errors.md`, `lessons/` |
-| Gate | No | No | (determinista) |
-| reviewer-security | Si | No | `incidents.md`, `errors.md` |
-| reviewer-code | Si | No | `constitution.md`, `lessons/`, `errors.md` |
-| reviewer-ux | Si | No | `lessons/` |
-| reviewer-ui | Si | No | `lessons/` |
-| Approver | Si | No | `decisions.md`, `lessons/`, `errors.md` |
-| Complexity | Si | No | `incidents.md`, `errors.md` |
-| Risk (human-gate) | Si | No | `decisions.md`, `constitution.md` |
-| Memory Curator | No | Si | `decisions.md`, `lessons/`, `errors.md`, `incidents.md`, `trace.md` |
-
-### Flujo de consulta
-
-```
-intake -> spec -> builder -> gate -> 4 reviewers -> approver -> complexity -> risk -> output -> memory-curator
-   v       v       v       -       vvvv           v           v         v        -          v
- Brain   Brain   Brain           Brain           Brain      Brain     Brain              Brain
- (lee)   (lee)   (lee)           (lee)           (lee)      (lee)     (lee)            (ESCRIBE)
-```
-
-### Regla
-
-- **Antes de actuar:** cada agente lee las secciones relevantes del Brain.
-- **Al terminar:** solo `memory-curator` escribe en el Brain.
-
 ## Reglas de uso
 
 1. Cada agente lee este skill antes de escribir su archivo de salida.
