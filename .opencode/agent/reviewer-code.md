@@ -1,7 +1,7 @@
 ---
 description: Revisa legibilidad, bugs, convenciones, arquitectura y cumplimiento TDD y cobertura
 mode: subagent
-model: opencode/deepseek-v4-flash-free
+model: opencode/nemotron-3.5-super-vl-free
 temperature: 0.2
 permission:
   edit:

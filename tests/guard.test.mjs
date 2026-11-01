@@ -69,3 +69,60 @@ test('plugin: lee output.args.command y lanza error al bloquear', async () => {
   await assert.rejects(before({ tool: 'bash' }, { args: {} }), /BLOCKED/); // formato inesperado => cerrado
   await assert.rejects(before({ tool: 'edit' }, { args: { filePath: 'factory/config.json' } }), /BLOCKED/);
 });
+
+// ---- Regresion: el agente quedaba bloqueado al escribir codigo/docs con heredoc (falsos positivos) ----
+const ESM = [
+  "export function formatAttempts(a, max = 5) {",
+  "  return `${Math.min(a, max)}/${max}`;",
+  "}",
+  "export const env = process.env.NODE_ENV; export default formatAttempts;",
+  "import { x } from './x.js'; // despues: git push; printenv; set; env",
+].join('\n');
+const BIG = Array.from({ length: 400 }, (_, i) => `export const v${i} = \`n:\${${i}}\`; // git push && env | cat .env`).join('\n');
+const HEREDOC_ALLOWED = [
+  `cat > src/formatAttempts.js <<'EOF'\n${ESM}\nEOF`,
+  `cat > src/big.js <<'EOF'\n${BIG}\nEOF`,
+  `cat > src/a.js <<EOF\nexport const a = 1;\nEOF`,
+  `cat >> 02-DOCS/wiki/sdd/decisions.md <<'EOF'\n## ADR-007\nUsa 01-TOOLS/risk.sh, .hooks/ship-guard.sh y opencode.json; ver $GH_TOKEN en docs\nEOF`,
+  `cat <<-'EOF' > docs/x.md\n\tgit push origin main (solo texto)\n\tEOF`,
+  `cat > a.txt <<'A'\nuno\nA\ncat > b.txt <<'B'\ndos export env\nB`,
+  `cat > a.js <<'EOF'\nexport const a = 1;\nEOF\ngit status`,
+  "echo '$(git push)'",
+  'echo "uso \\`git push\\` en la doc"',
+  'export FOO=1 && npm test',
+  "git commit -m \"docs: menciona opencode.json y .hooks/\"",
+];
+const HEREDOC_BLOCKED = [
+  "bash <<'EOF'\ngit push origin main\nEOF",
+  "sh <<EOF\ngit merge x\nEOF",
+  "cat > a.txt <<EOF\n$(git push origin main)\nEOF",
+  "cat > .opencode/plugins/factory-guard.js <<'EOF'\nx\nEOF",
+  "cat <<'EOF' > opencode.json\n{}\nEOF",
+  "cat > a.js <<'EOF'\nexport const a = 1;\nEOF\ngit push origin main",
+  'echo "$(git push)"',
+  'echo "it\'s" $(git push origin main) \'x\'',
+  'printenv',
+  'export',
+  'export -p',
+  "eval \"$(printenv)\"",
+];
+for (const cmd of HEREDOC_ALLOWED) test(`heredoc/dato permitido: ${cmd.split('\n')[0].slice(0, 60)} (${cmd.length} chars)`, () => assert.equal(classifyBash(cmd).blocked, false));
+for (const cmd of HEREDOC_BLOCKED) test(`heredoc/real bloqueado: ${cmd.split('\n')[0].slice(0, 60)}`, () => assert.equal(classifyBash(cmd).blocked, true));
+
+test('herramientas: solo cuenta la RUTA de destino, no el contenido', () => {
+  const docs = 'ver .hooks/ship-guard.sh, opencode.json y factory/config.json';
+  assert.equal(classifyTool('write', { filePath: '02-DOCS/wiki/sdd/decisions.md', content: docs }).blocked, false);
+  assert.equal(classifyTool('edit', { filePath: 'src/a.js', oldString: 'x', newString: docs }).blocked, false);
+  assert.equal(classifyTool('write', { filePath: '/repo/.hooks/ship-guard.sh', content: 'x' }).blocked, true);
+  assert.equal(classifyTool('multiedit', { filePath: 'opencode.json', edits: [] }).blocked, true);
+  assert.equal(classifyTool('edit', { oldString: 'a', newString: 'b' }).blocked, true); // sin ruta: cerrado
+});
+test('herramientas: patch/apply_patch se evalua por los archivos que toca', () => {
+  const ok = '*** Begin Patch\n*** Update File: src/a.js\n@@\n-a\n+b // menciona .hooks/\n*** End Patch';
+  const bad = '*** Begin Patch\n*** Update File: .hooks/ship-guard.sh\n@@\n-a\n+b\n*** End Patch';
+  const diffBad = 'diff --git a/factory/config.json b/factory/config.json\n--- a/factory/config.json\n+++ b/factory/config.json\n@@\n-a\n+b';
+  assert.equal(classifyTool('apply_patch', { patchText: ok }).blocked, false);
+  assert.equal(classifyTool('apply_patch', { patchText: bad }).blocked, true);
+  assert.equal(classifyTool('patch', { patch: diffBad }).blocked, true);
+  assert.equal(classifyTool('patch', { patch: 'sin cabeceras' }).blocked, true); // no se pudo leer: cerrado
+});

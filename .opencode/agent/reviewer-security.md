@@ -1,7 +1,7 @@
 ---
 description: Revisa seguridad, performance y observabilidad del codigo del Builder
 mode: subagent
-model: opencode/glm-5.3-flash-free
+model: opencode/deepseek-v4.1-flash-free
 temperature: 0.2
 permission:
   edit:
