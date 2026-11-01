@@ -1,8 +1,7 @@
 {
   "announced": true,
   "seenBy": {
-    "main": "fb3940cf0d98a53256aa186287b0994126ee1897",
-    "fix/guard-heredoc-limpio": "67a28c5b5604a4c4b6d93e93059824aadc219f68"
+    "main": "fb3940cf0d98a53256aa186287b0994126ee1897"
   },
   "waiting": {},
   "queue": [],
@@ -12,7 +11,7 @@
   ],
   "notices": [],
   "clashes": [],
-  "lastFetch": 1793560465316,
+  "lastFetch": 1793331222609,
   "snap": {
     "head": "3e80d1f1f20e47bad4f048e28cf3859558197a3f",
     "commit": "4cd56dc471947450bc98549318efe2e51c9ec74c"
