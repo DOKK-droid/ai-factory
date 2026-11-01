@@ -31,7 +31,6 @@
     "specify",
     "suggest",
     "tasks",
-    "tidy",
     "unslop",
     "ux",
     "verify",
@@ -45,7 +44,7 @@
     "refuter-tests"
   ],
   "ownSkills": [],
-  "catalogVersion": "3.7.1",
+  "catalogVersion": "3.6.0",
   "tier": null,
   "optOuts": [
     "trunk-open"

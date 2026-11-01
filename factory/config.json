@@ -1,28 +1,28 @@
 {
   "tiers": {
     "opus": "opencode/nemotron-3.5-super-vl-free",
-    "sonnet": "opencode/deepseek-v4.1-flash-free",
+    "sonnet": "opencode/deepseek-v4-flash-free",
     "sol": "opencode/glm-5.3-flash-free",
     "astra": "opencode/mimo-v2.6-flash-free"
   },
   "roles": {
-    "spec-writer": "sol",
+    "spec-writer": "opus",
     "builder": "opus",
-    "reviewer-security": "sonnet",
+    "reviewer-security": "sol",
     "reviewer-ux": "sol",
-    "reviewer-ui": "sol",
-    "reviewer-code": "opus",
+    "reviewer-ui": "astra",
+    "reviewer-code": "sonnet",
     "approver": "sonnet",
     "human-gate": "sonnet",
-    "memory-curator": "sol",
-    "intake": "astra",
+    "memory-curator": "sonnet",
+    "intake": "sonnet",
     "orchestrator": "opus"
   },
   "fallback": {
-    "opus": "opencode/deepseek-v4.1-flash-free",
-    "sonnet": "opencode/deepseek-v4.1-flash-free",
-    "sol": "opencode/deepseek-v4.1-flash-free",
-    "astra": "opencode/deepseek-v4.1-flash-free"
+    "opus": "opencode/deepseek-v4-flash-free",
+    "sonnet": "opencode/deepseek-v4-flash-free",
+    "sol": "opencode/deepseek-v4-flash-free",
+    "astra": "opencode/deepseek-v4-flash-free"
   },
   "max_rounds": 3,
   "max_diff_lines": 400,
