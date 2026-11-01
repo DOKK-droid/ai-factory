@@ -1,43 +1,38 @@
 # =============================================================================
-# AI Factory — .gitignore crítico (aislamiento entre proyectos)
+# AI Factory .gitignore
 # =============================================================================
 
-# --- Dependencias ---
+# --- Dependencias (los lockfiles SI se versionan: reproducibilidad y supply chain) ---
 node_modules/
 .bun/
 .yarn/
-.bun.lockb
-yarn.lock
-package-lock.json
 
 # --- Entornos y secretos ---
 .env
 .env.*
-.env.local
 *.env
 !.env.example
+!.env.sample
+!.env.template
 
 # --- Python ---
 __pycache__/
 *.py[cod]
-*.pyc
 .venv/
 venv/
-.env
 
-# --- RSC Harness (backups y sesiones, no commitear) ---
+# --- Estado local de RSC / OpenCode (rutas de tu maquina, backups, sesiones) ---
 .rsc/backups/
 .rsc/audit.json
 .rsc/agent-digests.json
-
-# --- OpenCode (config local, no commitear secretos) ---
+.opencode/rsc/.rsc-state.json
+.opencode/node_modules/
 .opencode/opencode.jsonc
-~/.config/opencode/opencode.jsonc
 
 # --- Logs ---
 *.log
-factory/logs/
 npm-debug.log*
+factory/logs/
 
 # --- Sistema ---
 .DS_Store
@@ -45,27 +40,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# =============================================================================
-# AISLAMIENTO CRÍTICO: Brain y jobs de otros proyectos
-# =============================================================================
-
-# Nunca commitear el Brain de otro proyecto dentro de este repo
-02-DOCS/*/projects/
-02-DOCS/other-project*/
-
-# Nunca commitear jobs de otro proyecto
-factory/jobs/*/other-project*/
-
-# Nunca commitear configuración de factory ajena
-factory/config.json.other-project*
-
-# Datos de prueba y jobs temporales (mantener .gitkeep si se necesita estructura)
+# --- Aislamiento: los jobs son del proyecto donde se ejecutaron, no de este repo ---
 factory/jobs/*/
 !factory/jobs/.gitkeep
+factory/worktrees/
 
-# Backups de RSC
-.rsc/backups/*
-
-# =============================================================================
-# Fin de .gitignore
-# =============================================================================
+# --- Salidas de pruebas A/B ---
+tests/ab/out/

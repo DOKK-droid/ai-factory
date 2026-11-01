@@ -5,9 +5,12 @@
   "description": "AI Software Factory sobre OpenCode con RSC Harness y modelos gratuitos",
   "private": true,
   "scripts": {
-    "factory:checks": "node 01-TOOLS/checks.js",
+    "test": "node --test tests/*.test.mjs",
+    "factory:checks": "bash 01-TOOLS/checks.sh",
     "factory:intake": "node 01-TOOLS/intake.js",
-    "factory:apply-models": "node factory/scripts/apply-models.js"
+    "factory:apply-models": "node factory/scripts/apply-models.js",
+    "factory:risk": "bash 01-TOOLS/risk.sh",
+    "hooks:install": "bash .hooks/install-git-hooks.sh"
   },
   "engines": {
     "node": ">=20.0.0"

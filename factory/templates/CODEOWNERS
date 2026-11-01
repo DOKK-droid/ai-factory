@@ -1,0 +1,11 @@
+# Plantilla CODEOWNERS: sustituye @OWNER por tu usuario (o equipo).
+# Con la regla "Require review from Code Owners" activa, los cambios en estas rutas exigen
+# aprobacion de un code owner DISTINTO del autor del PR (por eso el agente debe usar otra identidad).
+*                       @OWNER
+/.github/               @OWNER
+/.hooks/                @OWNER
+/.opencode/             @OWNER
+/factory/               @OWNER
+/01-TOOLS/              @OWNER
+/opencode.json          @OWNER
+/CODEOWNERS             @OWNER

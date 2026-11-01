@@ -3,6 +3,16 @@ description: Normaliza Sentry / GitHub Issue / tarea manual a input.md dentro de
 mode: subagent
 model: opencode/deepseek-v4-flash-free
 temperature: 0.1
+permission:
+  edit:
+    "*": deny
+    "factory/jobs/*/input.md": allow
+  bash:
+    "*": deny
+    "node 01-TOOLS/intake.js*": allow
+    "gh issue view*": allow
+    "gh issue list*": allow
+  webfetch: deny
 ---
 
 # Agente: intake

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# pre-commit (versionado en .hooks/git, activado con core.hooksPath)
+# 1) bloquea .env y secretos en lo que se va a commitear (siempre)
+# 2) bloquea commits directos a main/master (un humano puede usar FACTORY_HUMAN=1)
+set -euo pipefail
+ENVS="$(git diff --cached --name-only --diff-filter=AM | grep -E '(^|/)\.env(\.|$)' | grep -vE '\.(example|sample|template)$' || true)"
+if [ -n "$ENVS" ]; then echo "pre-commit: archivos .env en el commit:" >&2; echo "$ENVS" >&2; exit 1; fi
+if git diff --cached -U0 | grep -E '^\+' | grep -Eq -- '-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-[A-Za-z0-9_-]{24,}|xox[baprs]-[A-Za-z0-9-]{10,}'; then
+  echo "pre-commit: posible secreto en los cambios (clave, token). Commit bloqueado." >&2; exit 1
+fi
+[ "${FACTORY_HUMAN:-0}" = "1" ] && exit 0
+BRANCH="$(git symbolic-ref --short -q HEAD || echo '')"
+case "$BRANCH" in
+  main|master) echo "pre-commit: commits directos a ${BRANCH} bloqueados. Usa una rama (humano: FACTORY_HUMAN=1)." >&2; exit 1 ;;
+esac

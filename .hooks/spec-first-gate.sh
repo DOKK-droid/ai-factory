@@ -1,22 +1,9 @@
-# Hook: spec-first-gate
-# Evita que el Builder inicie sin un Spec aprobado en el job
-# Ubicado en: .hooks/spec-first-gate.sh
-
 #!/usr/bin/env bash
+# spec-first-gate: el Builder no inicia sin un spec valido. Uso: spec-first-gate.sh <job-id>
 set -euo pipefail
-
 JOB_ID="${1:?Falta ID de job}"
-JOB_DIR="factory/jobs/${JOB_ID}"
-
-if [ ! -f "${JOB_DIR}/spec.md" ]; then
-  echo "ERROR: No existe spec.md para el job ${JOB_ID}. El Builder no puede iniciar sin Spec."
-  exit 1
-fi
-
-if ! grep -q "^Surface: " "${JOB_DIR}/spec.md" 2>/dev/null; then
-  echo "ERROR: spec.md no tiene la linea 'Surface: page | none' requerida."
-  exit 1
-fi
-
-echo "OK: Spec presente y valido para el job ${JOB_ID}"
-exit 0
+SPEC="${FACTORY_JOBS_DIR:-factory/jobs}/${JOB_ID}/spec.md"
+[ -f "$SPEC" ] || { echo "ERROR: no existe spec.md para el job ${JOB_ID}." >&2; exit 1; }
+grep -Eq '^Surface:[[:space:]]*(page|none)[[:space:]]*$' "$SPEC" || { echo "ERROR: spec.md necesita la linea 'Surface: page' o 'Surface: none'." >&2; exit 1; }
+grep -Eq '^[[:space:]]*[0-9]+[.)]' "$SPEC" || { echo "ERROR: spec.md no tiene criterios de aceptacion numerados." >&2; exit 1; }
+echo "OK: spec valido para ${JOB_ID}."

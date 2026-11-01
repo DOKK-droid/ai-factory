@@ -1,18 +1,20 @@
 {
   "announced": true,
-  "seenBy": {},
+  "seenBy": {
+    "main": "fb3940cf0d98a53256aa186287b0994126ee1897"
+  },
   "waiting": {},
-  "queue": [
+  "queue": [],
+  "ours": [
     "4cd56dc471947450bc98549318efe2e51c9ec74c",
     "8c1ed502d16e6f7dd4fdc600678257388a9a5bbf"
   ],
-  "ours": [],
   "notices": [],
   "clashes": [],
-  "lastFetch": 1793302077838,
+  "lastFetch": 1793331222609,
   "snap": {
     "head": "3e80d1f1f20e47bad4f048e28cf3859558197a3f",
     "commit": "4cd56dc471947450bc98549318efe2e51c9ec74c"
   },
-  "head": "efc1bde4c206a4e6e400796090e62ec9b00d3a92"
+  "head": "fb3940cf0d98a53256aa186287b0994126ee1897"
 }
