@@ -12,10 +12,10 @@
   ],
   "notices": [],
   "clashes": [],
-  "lastFetch": 1793545340121,
+  "lastFetch": 1793553989933,
   "snap": {
-    "head": "3e80d1f1f20e47bad4f048e28cf3859558197a3f",
-    "commit": "4cd56dc471947450bc98549318efe2e51c9ec74c"
+    "head": "8b50275dd2cf94e471785bed0d9c0d18201949f5",
+    "commit": "392e0ff422594712259187cd09630bd06198c674"
   },
-  "head": "fb3940cf0d98a53256aa186287b0994126ee1897"
+  "head": "8b50275dd2cf94e471785bed0d9c0d18201949f5"
 }
