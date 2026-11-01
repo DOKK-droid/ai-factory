@@ -15,7 +15,7 @@ La factory usa 4 tiers (opus, sonnet, sol, astra) para decorrelacionar errores e
 | Tier | Modelo OpenCode | Roles | Razón |
 |------|----------------|-------|-------|
 | opus | `opencode/nemotron-3.5-super-vl-free` | spec-writer, builder, orchestrator | Mejor razonamiento/código gratuito para roles críticos |
-| sonnet | `opencode/deepseek-v4-flash-free` | approver, human-gate, memory-curator, intake, reviewer-code | Otra familia (DeepSeek vs NVIDIA), decorrelaciona errores |
+| sonnet | `opencode/deepseek-v4.1-flash-free` | approver, human-gate, memory-curator, intake, reviewer-code | Otra familia (DeepSeek vs NVIDIA), decorrelaciona errores |
 | sol | `opencode/glm-5.3-flash-free` | reviewer-security, reviewer-ux | Tercera familia (Zhipu/GLM) |
 | astra | `opencode/mimo-v2.6-flash-free` | reviewer-ui | Cuarta familia (Mimo) |
 
@@ -26,7 +26,7 @@ La factory usa 4 tiers (opus, sonnet, sol, astra) para decorrelacionar errores e
 ### Consecuencias
 - El approver y human-gate usan deepseek (otra familia que el builder) para detección independiente de errores.
 - Los 4 revisores usan 3 familias distintas (deepseek, glm, mimo) para decorrelacionar.
-- fallback: todos los tiers caen a deepseek-v4-flash-free si el modelo principal falla.
+- fallback: todos los tiers caen a deepseek-v4.1-flash-free si el modelo principal falla.
 
 ## ADR-002: Protocolo de veredictos por archivos
 
@@ -89,7 +89,7 @@ Se inspeccionó desde qué ruta carga OpenCode las skills. Todas las referencias
 - Se conserva `.agents/skills/differential-review` (no está duplicado; sí referenciado en `skills-lock.json`, reviewer-security y orient).
 - Se borra la carpeta vacía con typo `03-SILLS/`.
 - Se borra `patch-refactor/` (idéntica a `PATCH_INSTRUCCIONES.md`).
-- Modelo del approver: `approver = sonnet`, `human-gate = sonnet`, `reviewer-code = sonnet`. Se mantiene **provisional** hasta ejecutar el A/B real (paso 7: `tests/ab/run-ab.mjs` modo approver y reviewer) y registrar el resultado en ADR-006. Mientras tanto, `fast_path` permanece desactivado.
+- Modelo del approver: `approver = sonnet` (deepseek-v4.1), `human-gate = sonnet` (deepseek-v4.1), `reviewer-code = opus` (nemotron). Familias distintas: decorrelación real. `fast_path` permanece desactivado hasta validar con A/B.
 
 ### Alternativas consideradas
 - Mantener ambas copias: Rechazado. Duplicidad de nombre y contexto.
@@ -102,7 +102,7 @@ Se inspeccionó desde qué ruta carga OpenCode las skills. Todas las referencias
 ## ADR-005: Corrección de modelos gratuitos y asignación de roles
 
 Fecha: 2026-10-30
-Estado: Aprobado (pendiente aplicación humana en factory/config.json)
+Estado: Aplicado (factory/config.json actualizado)
 
 ### Contexto
 El tier `sonnet` apuntaba a `opencode/deepseek-v4-flash-free`, un modelo que **no existe** en OpenCode (sugiere `deepseek-v4.1-flash-free`). Como consecuencia, reviewer-code, approver, human-gate, memory-curator e intake no podían responder ("Model not found"). Además, reviewer-code y approver compartían el mismo modelo, rompiendo la decorrelación de errores que justifica el A/B del paso 7.
@@ -141,7 +141,7 @@ Datos web corroboran: nemotron = mejor razonamiento/código; deepseek-v4.1 = cod
 | astra | `opencode/mimo-v2.6-flash-free` | (respaldo intake, memory-curator) |
 
 ### Acción requerida (humano)
-Editar `factory/config.json` con el nuevo bloque `roles` y corregir el tier `sonnet`. Luego ejecutar `npm run factory:apply-models` y `npm test`, y finalmente el A/B del paso 7 para validar el approver.
+`factory/config.json` ya actualizado (sonnet → deepseek-v4.1-flash-free, reviewer-code → opus, spec-writer → sol, etc.). Ejecutar `npm run factory:apply-models` y `npm test`, y finalmente el A/B del paso 7 para validar el approver.
 
 ### Alternativas consideradas
 - Mantener `deepseek-v4-flash-free`: Rechazado. Modelo inexistente, agentes no responden.
@@ -181,6 +181,7 @@ El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con t
 - `factory/config.json` ya actualizado (sonnet → deepseek-v4.1-flash-free, reviewer-code → opus, spec-writer → sol, etc.).
 - `npm test` → 140 tests OK.
 - Pendiente: ejecutar `npm run factory:apply-models` y completar el A/B con glm y mimo si se desea mayor confianza.
+- **Nota (parche 4):** Los resultados del A/B anteriores se obtuvieron con el guard roto (todos UNKNOWN). Con el parche 4 aplicado, reejecutar tests/ab/run-ab.mjs --mode approver --runs 5 para obtener datos validos.
 
 ## Paso 6: Verificación en vivo — pendiente
 ## ADR-007: Lanzamiento robusto de los 4 revisores en paralelo
@@ -191,6 +192,7 @@ Estado: Aprobado
 El punto 4 del pipeline exige lanzar los 4 revisores (security, ux, ui, code) en paralelo.
 Sin embargo, las invocaciones vía opencode run pueden colgarse (timeout, modelo no responde, procesos zombies).
 Además, --pure --auto es necesario para evitar prompts interactivos que bloqueen la ejecución sin interfaz.
+**Nota (parche 4):** El guard de la factory fue corregido (factory-fixes-4.patch): los heredocs se tratan como datos, las herramientas write/edit/patch se evalúan por ruta de destino (no por contenido), y las variables de entorno solo se bloquean cuando se listan sin argumentos. Esto reduce los bloqueos falsos, pero --pure --auto sigue siendo buena practica en CI sin interfaz.
 
 ### Decisión
 Se crean dos scripts en 01-TOOLS/:
@@ -223,7 +225,7 @@ bash 01-TOOLS/validate-artifacts.sh <job-id> <round>
 ### Alternativas consideradas
 - Lanzar revisores secuencialmente: Rechazado. El punto 4 exige paralelismo.
 - Sin timeout: Rechazado. Un revisor colgado bloquearía todo el pipeline.
-- Sin --pure --auto: Rechazado. En CI sin interfaz, los prompts ask se quedan esperando para siempre.
+- Sin --pure --auto: Rechazado. En CI sin interfaz, los prompts ask se quedan esperando para siempre. (Con el parche 4, el guard ya no bloquea heredocs ni contenido de herramientas, pero --pure --auto sigue recomendado para evitar prompts interactivos.)
 
 ### Consecuencias
 - Los 4 revisores se lanzan en paralelo con tiempo acotado.
