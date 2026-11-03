@@ -75,7 +75,7 @@ El video muestra un "camino rápido" donde el código va directo a main. En esta
 ## ADR-004: Skills en una sola copia y modelo del approver provisional
 
 Fecha: 2026-10-30
-Estado: Aprobado
+Estado: Provisional (modelo del approver pendiente de A/B valido)
 
 ### Contexto
 `code-review`, `receiving-code-review` y `test-driven-development` existían dos veces: versión completa en `.agents/skills/` y versión resumida en `03-SKILLS/`. Dos copias con el mismo nombre confunden qué se carga y gastan contexto. Además, la configuración de la factory movió `approver` y `human-gate` a `sonnet` (deepseek) para decorrelacionar, pero `reviewer-code` usa el mismo modelo y el A/B que lo justificaría (paso 7 de PATCH_INSTRUCCIONES) aún no se ha ejecutado.
@@ -102,7 +102,7 @@ Se inspeccionó desde qué ruta carga OpenCode las skills. Todas las referencias
 ## ADR-005: Corrección de modelos gratuitos y asignación de roles
 
 Fecha: 2026-10-30
-Estado: Aplicado (factory/config.json actualizado)
+Estado: Propuesto (IDs sin validar contra opencode models; basado en autoevaluacion)
 
 ### Contexto
 El tier `sonnet` apuntaba a `opencode/deepseek-v4-flash-free`, un modelo que **no existe** en OpenCode (sugiere `deepseek-v4.1-flash-free`). Como consecuencia, reviewer-code, approver, human-gate, memory-curator e intake no podían responder ("Model not found"). Además, reviewer-code y approver compartían el mismo modelo, rompiendo la decorrelación de errores que justifica el A/B del paso 7.
@@ -155,7 +155,7 @@ Datos web corroboran: nemotron = mejor razonamiento/código; deepseek-v4.1 = cod
 ## ADR-006: Resultado A/B del approver (paso 7)
 
 Fecha: 2026-10-30
-Estado: Aprobado
+Estado: Inconcluso (fixture defectuoso; repetir con el fixture del parche 5)
 
 ### Contexto
 Se ejecutó `tests/ab/run-ab.mjs --mode approver --runs 5` con 4 modelos gratuitos contra dos ramas: `cand-flawed` (3 fallos intencionados) y `cand-clean` (debería aprobarse).
@@ -186,7 +186,7 @@ El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con t
 ## Paso 6: Verificación en vivo — pendiente
 ## ADR-007: Lanzamiento robusto de los 4 revisores en paralelo
 Fecha: 2026-10-30
-Estado: Aprobado
+Estado: Reemplazado por el parche 5 (launch-reviewers.sh reescrito)
 
 ### Contexto
 El punto 4 del pipeline exige lanzar los 4 revisores (security, ux, ui, code) en paralelo.
