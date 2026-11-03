@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+export FACTORY_GUARD_ALLOW_PROTECTED_EDIT=1
+
+exec opencode "$@"

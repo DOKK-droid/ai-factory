@@ -24,6 +24,12 @@ La memoria persistente vive en `02-DOCS/` y específicamente en `02-DOCS/wiki/`.
 - Cualquier valor ambiguo en un review se trata como CHANGES / ESCALATE / NEEDS_HUMAN (fallar hacia el lado seguro)
 - Si `Surface: none`, reviewer-ux y reviewer-ui devuelven `PASS (n/a)` pero siempre se lanzan los 4
 
+## Regla de conducta (obligatoria)
+Si factory-guard, un permiso o un hook bloquean una acción, DETENTE. No la rodees
+(ni con variables, intérpretes, otro archivo, otra herramienta o nombre de rama).
+Explica qué intentabas, qué bloqueo apareció y qué cambio necesitas, y espera al humano.
+Una rama = un tema = un PR (factory/<job-id>).
+
 ## Modelos
 
 Configurados en `factory/config.json` (tiers: opus, sonnet, sol, astra mapeados a modelos gratuitos de OpenCode).
