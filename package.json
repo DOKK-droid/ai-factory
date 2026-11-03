@@ -6,6 +6,8 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "factory:agent": "./factory-agent",
+    "factory:maint": "./factory-maint",
     "factory:checks": "bash 01-TOOLS/checks.sh",
     "factory:intake": "node 01-TOOLS/intake.js",
     "factory:apply-models": "node factory/scripts/apply-models.js",
