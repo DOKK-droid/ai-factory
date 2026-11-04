@@ -6,7 +6,7 @@ temperature: 0.1
 permission:
   edit:
     "*": deny
-    "factory/jobs/*/input.md": allow
+    "*factory/jobs/*/input.md": allow
   bash:
     "*": deny
     "node 01-TOOLS/intake.js*": allow

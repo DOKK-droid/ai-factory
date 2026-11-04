@@ -1,67 +1,34 @@
 #!/usr/bin/env bash
-#
-# validate-artifacts.sh — Valida que review-*.md y decision.md tengan formato correcto.
-#
-# Uso: bash 01-TOOLS/validate-artifacts.sh <job-id> <round>
-#
-# Qué hace:
-#   1. Verifica que cada review-<x>.md (security, ux, ui, code) tenga:
-#        - Línea 1: VERDICT: PASS | CHANGES | PASS (n/a)
-#        - Línea 2: SCORE: 0-1
-#   2. Verifica que decision.md tenga:
-#        - Línea 1: APPROVE | CHANGES | ESCALATE
-#   3. Retorna código 0 si todo es válido; código 1 si hay algún problema.
-#
-# Regla: cualquier valor ambiguo → CHANGES / ESCALATE / NEEDS_HUMAN (lado seguro).
-
+# validate-artifacts.sh — Valida el FORMATO de review-*.md y decision.md (no su veracidad).
+# Uso: bash 01-TOOLS/validate-artifacts.sh <job-id> [round]     (round por defecto: el ultimo)
+#   review-<x>.md (security, ux, ui, code): linea 1 `VERDICT: PASS|CHANGES|PASS (n/a)`, linea 2 `SCORE: 0..1`
+#   decision.md (si existe): linea 1 `APPROVE|CHANGES|ESCALATE`
+# Sale 0 solo si TODO es valido. Un valor ambiguo se trata como invalido (lado seguro).
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-JOB_ID="${1:?Uso: bash 01-TOOLS/validate-artifacts.sh <job-id> <round>}"
-ROUND="${2:-1}"
-
-F_DIR="factory"; J_DIR="jobs"; JOB_DIR="${F_DIR}/${J_DIR}/${JOB_ID}"
-ROUND_DIR="${JOB_DIR}/round-${ROUND}"
+JOB_ID="${1:?Uso: bash 01-TOOLS/validate-artifacts.sh <job-id> [round]}"
+JOB_DIR="$(factory_jobs_dir)/${JOB_ID}"
+if [ -n "${2:-}" ]; then ROUND_DIR="${JOB_DIR}/round-${2}"
+else ROUND_DIR="$(ls -d "${JOB_DIR}"/round-* 2>/dev/null | sort -V | tail -1)"; fi
+[ -n "${ROUND_DIR:-}" ] && [ -d "$ROUND_DIR" ] || { echo "FAIL: no hay round en ${JOB_DIR}"; exit 1; }
 
 FAILURES=0
-
-# ── Validar reviews de los 4 revisores ──────────────────────────────────────
 for role in security ux ui code; do
-  review_file="${ROUND_DIR}/review-${role}.md"
-  if [ ! -f "$review_file" ]; then
-    echo "FAIL: falta ${review_file}"
-    FAILURES=$((FAILURES + 1))
-    continue
-  fi
-  first_line=$(head -1 "$review_file" | tr -d '\r')
-  second_line=$(sed -n '2p' "$review_file" | tr -d '\r')
-  if ! echo "$first_line" | grep -qE "^VERDICT: (PASS|CHANGES|PASS \(n/a\))$"; then
-    echo "FAIL: ${review_file} línea 1 no tiene VERDICT válido (tiene: ${first_line})"
-    FAILURES=$((FAILURES + 1))
-  fi
-  if ! echo "$second_line" | grep -qE "^SCORE: [0-9](\.[0-9]+)?$"; then
-    echo "FAIL: ${review_file} línea 2 no tiene SCORE válido (tiene: ${second_line})"
-    FAILURES=$((FAILURES + 1))
-  fi
-  echo "OK: ${review_file} -> ${first_line} | ${second_line}"
+  f="${ROUND_DIR}/review-${role}.md"
+  if [ ! -f "$f" ]; then echo "FAIL: falta ${f}"; FAILURES=$((FAILURES + 1)); continue; fi
+  l1="$(head -1 "$f" | tr -d '\r')"; l2="$(sed -n '2p' "$f" | tr -d '\r')"; bad=0
+  printf '%s\n' "$l1" | grep -qE '^VERDICT: (PASS|CHANGES|PASS \(n/a\))$' || { echo "FAIL: ${f} linea 1 sin VERDICT valido (tiene: ${l1})"; bad=1; }
+  printf '%s\n' "$l2" | grep -qE '^SCORE: (0(\.[0-9]+)?|1(\.0+)?)$'      || { echo "FAIL: ${f} linea 2 sin SCORE entre 0 y 1 (tiene: ${l2})"; bad=1; }
+  if [ "$bad" -eq 0 ]; then echo "OK: ${f} -> ${l1} | ${l2}"; else FAILURES=$((FAILURES + 1)); fi
 done
 
-# ── Validar decision.md si existe ───────────────────────────────────────────
-decision_file="${JOB_DIR}/decision.md"
-if [ -f "$decision_file" ]; then
-  first_line=$(head -1 "$decision_file" | tr -d '\r')
-  if ! echo "$first_line" | grep -qE "^(APPROVE|CHANGES|ESCALATE)$"; then
-    echo "FAIL: ${decision_file} línea 1 no tiene decisión válida (tiene: ${first_line})"
-    FAILURES=$((FAILURES + 1))
-  else
-    echo "OK: ${decision_file} -> ${first_line}"
-  fi
+d="${JOB_DIR}/decision.md"
+if [ -f "$d" ]; then
+  l1="$(head -1 "$d" | tr -d '\r')"
+  if printf '%s\n' "$l1" | grep -qE '^(APPROVE|CHANGES|ESCALATE)$'; then echo "OK: ${d} -> ${l1}"
+  else echo "FAIL: ${d} linea 1 sin decision valida (tiene: ${l1})"; FAILURES=$((FAILURES + 1)); fi
 fi
 
-# ── Resultado ───────────────────────────────────────────────────────────────
-if [ "$FAILURES" -eq 0 ]; then
-  echo "VALIDACIÓN COMPLETA: todos los artefactos tienen formato correcto"
-  exit 0
-else
-  echo "VALIDACIÓN FALLÓ: ${FAILURES} problema(s) encontrado(s)"
-  exit 1
-fi
+if [ "$FAILURES" -eq 0 ]; then echo "VALIDACION COMPLETA: formato correcto"; exit 0; fi
+echo "VALIDACION FALLO: ${FAILURES} problema(s)"; exit 1

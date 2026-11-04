@@ -13,13 +13,14 @@ export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 
 export const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', ...opts });
 
 /** Repo temporal con rama main y una rama `feat` con cambios. */
-export function makeRepo() {
+export function makeRepo(extra = {}) {
   const dir = tmp('af-repo-');
   git(dir, 'init', '-q', '-b', 'main');
   git(dir, 'config', 'user.email', 't@t.t'); git(dir, 'config', 'user.name', 't');
   git(dir, 'config', 'commit.gpgsign', 'false');
   write(path.join(dir, 'src/app.js'), 'export const a = 1;\n');
   write(path.join(dir, 'tests/app.test.js'), "test('a', () => { expect(1 + 1).toBe(2); });\n");
+  for (const [f, t] of Object.entries(extra)) write(path.join(dir, f), t);
   git(dir, 'add', '-A'); git(dir, 'commit', '-qm', 'base');
   git(dir, 'checkout', '-qb', 'feat');
   return dir;

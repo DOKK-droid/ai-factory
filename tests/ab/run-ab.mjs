@@ -4,7 +4,7 @@
  *   node tests/ab/run-ab.mjs --models opencode/a,opencode/b --mode approver --runs 3
  *   node tests/ab/run-ab.mjs --models ... --mode reviewer --roles security,code
  *   --dry-run   solo muestra cuantas ejecuciones y un prompt de ejemplo
- * Variables: OPENCODE_BIN (por defecto "opencode"). Se invoca: opencode run --model <m> "<prompt>"
+ * Variables: OPENCODE_BIN (por defecto "opencode"), AB_TIMEOUT_MIN (minutos por llamada; 5 por defecto, sube a 60 con modelos lentos). Se invoca: opencode run --model <m> "<prompt>"
  * (confirma con `opencode run --help`; si tus flags difieren, ajusta runModel()).
  * El prompt NO revela los fallos. Se ejecuta en un repo desechable, nunca en tu proyecto.
  */
@@ -29,7 +29,7 @@ const fx = path.join(os.tmpdir(), `af-ab-${Date.now()}`);
 execFileSync('bash', [path.join(HERE, 'make-fixture.sh'), fx], { stdio: 'inherit' });
 const diff = (c) => execFileSync('git', ['diff', `main...${c}`], { cwd: fx, encoding: 'utf8' });
 const body = (role) => fs.readFileSync(path.join(REPO, `.opencode/agent/reviewer-${role}.md`), 'utf8').replace(/^---[\s\S]*?\n---\n/, '');
-const SPEC = 'Spec: endurecer el login (rate limit por intentos y busqueda de usuario por email). Criterios: 1) se bloquea al llegar a 5 intentos; 2) las consultas a BD usan parametros; 3) hay tests que validan ambos.';
+const SPEC = 'Spec: anadir remainingAttempts(attempts) en src/rateLimit.js (intentos restantes, minimo 0) con tests. NO cambiar el comportamiento existente de isBlocked ni de getUserByEmail.';
 const FORMAT = 'Responde SOLO con texto (no uses herramientas, no edites archivos).';
 
 function prompts() {
@@ -49,7 +49,7 @@ function prompts() {
 }
 
 function runModel(model, prompt) {
-  const r = spawnSync(process.env.OPENCODE_BIN || 'opencode', ['run', '--model', model, prompt], { cwd: fx, encoding: 'utf8', timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
+  const r = spawnSync(process.env.OPENCODE_BIN || 'opencode', ['run', '--model', model, prompt], { cwd: fx, encoding: 'utf8', timeout: Number(process.env.AB_TIMEOUT_MIN || 5) * 60 * 1000, maxBuffer: 20 * 1024 * 1024 });
   return { out: `${r.stdout || ''}${r.stderr ? `\n[stderr]\n${r.stderr}` : ''}`, status: r.status };
 }
 

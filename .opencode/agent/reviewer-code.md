@@ -4,19 +4,8 @@ mode: subagent
 model: opencode/glm-5.3-flash-free
 temperature: 0.2
 permission:
-  edit:
-    "*": deny
-    "factory/jobs/*/round-*/review-code.md": allow
-  bash:
-    "*": deny
-    "git diff*": allow
-    "git log*": allow
-    "git status*": allow
-    "git show*": allow
-    "grep *": allow
-    "rg *": allow
-    "bash 01-TOOLS/checks.sh*": allow
-    "npm test*": allow
+  edit: deny
+  bash: deny
   webfetch: deny
 ---
 

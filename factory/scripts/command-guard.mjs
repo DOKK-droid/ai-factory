@@ -11,19 +11,32 @@
 
 // Rutas que los agentes NO deben modificar (el guard, el gate, la config...).
 export const PROTECTED_PATHS = [
-  '.opencode/plugins/factory-guard.js',
-  'factory/scripts/command-guard.mjs',
-  'factory/config.json',
-  '.hooks/',
-  '01-TOOLS/checks.sh',
-  '01-TOOLS/risk.sh',
-  '01-TOOLS/intake.js',
-  '.opencode/agent/',
-  '.opencode/command/',
-  'opencode.json',
-  '.git/hooks',
-  '.git/config',
+  // enforcement y configuracion
+  '.opencode/plugins/', 'factory/scripts/', 'factory/config.json', 'opencode.json', '.opencode/agent/', '.opencode/command/',
+  '.hooks/', '.git/hooks/', '.git/config', '.github/', 'factory/templates/',
+  // scripts del gate y del pipeline (si el agente los pudiera editar, podria volver verde cualquier cosa)
+  '01-TOOLS/checks.sh', '01-TOOLS/risk.sh', '01-TOOLS/intake.js', '01-TOOLS/lib.sh', '01-TOOLS/new-job.sh',
+  '01-TOOLS/launch-reviewers.sh', '01-TOOLS/validate-artifacts.sh',
+  // lanzadores y reglas de conducta
+  'factory-agent', 'factory-maint', 'AGENTS.md',
+  // auditoria del guard: el agente puede leerla, no editarla ni resetear el modo parada
+  'factory/logs/',
 ];
+
+/** Palabras que un agente no tiene motivo para escribir: abren puertas traseras al guard o a los hooks. */
+const BACKDOOR_RE = /factory-maint|FACTORY_GUARD_ALLOW_PROTECTED_EDIT|FACTORY_HUMAN\b/;
+const INTERPRETERS = new Set(['python', 'python3', 'node', 'nodejs', 'deno', 'bun', 'perl', 'ruby', 'php', 'lua', 'pwsh', 'powershell']);
+const ENV_MENTION_RE = /(^|[^\w])\.env(?!\w)(?![.\w]*(?:example|sample|template))/;
+
+/** Ruta de destino protegida? Los directorios (terminan en "/") por prefijo; los archivos por nombre exacto. */
+export function isProtectedPath(target) {
+  const t = String(target).replace(/\\/g, '/').replace(/^\.\//, '');
+  return PROTECTED_PATHS.find((p) => (p.endsWith('/') ? t.startsWith(p) || t.includes('/' + p) : t === p || t.endsWith('/' + p)));
+}
+/** El texto (codigo de un intérprete) menciona rutas protegidas o archivos .env? */
+export function mentionsProtected(text) {
+  return PROTECTED_PATHS.find((p) => String(text).includes(p)) || (ENV_MENTION_RE.test(text) ? '.env' : undefined);
+}
 
 const WRAPPERS = new Set(['sudo', 'env', 'command', 'nohup', 'time', 'exec', 'nice', 'xargs', 'timeout', 'stdbuf']);
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh']);
@@ -40,7 +53,13 @@ const PUSH_OK_FLAGS = new Set(['-u', '--set-upstream', '-q', '--quiet', '-v', '-
 const REMOTE_RE = /^[A-Za-z0-9._-]+$/;
 
 const ok = () => ({ blocked: false });
-const block = (reason) => ({ blocked: true, reason });
+// kind: 'grave'  = intento de hacer lo que la fabrica nunca debe hacer (tocar proteccion, secretos, main, merge,
+//                  force, rodeos): cuenta para el modo parada rapido (3).
+//       'policy' = error de FORMA recuperable (push sin rama explicita, `gh pr create` sin --draft, checkout main).
+const block = (reason, kind = 'grave') => ({ blocked: true, reason, kind });
+const grave = (reason) => block(reason, 'grave');
+const soft = (reason) => block(reason, 'policy');
+const FORCEISH = new Set(['-f', '--force', '--force-with-lease', '--delete', '-d', '--mirror', '--all', '--tags', '--prune']);
 
 function isEnvFile(token) {
   const t = String(token).replace(/^['"]|['"]$/g, '');
@@ -62,6 +81,7 @@ export function splitSegments(input) {
     }
     if (c === '\\' && i + 1 < input.length) { cur += c + input[++i]; continue; }
     if (c === '"' || c === "'") { quote = c; cur += c; continue; }
+    if (c === '&' && (input[i - 1] === '>' || input[i + 1] === '>')) { cur += c; continue; } // 2>&1, >&2, &>
     if (';&|\n()`'.includes(c)) { if (cur.trim()) segments.push(cur); cur = ''; continue; }
     cur += c;
   }
@@ -129,6 +149,7 @@ function splitHeredocs(command) {
   const lines = command.split('\n');
   const out = [];
   const bodies = [];
+  const interpBodies = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     out.push(line);
@@ -152,10 +173,11 @@ function splitHeredocs(command) {
       const recv = head.length ? head[0].split('/').pop() : '';
       const text = body.join('\n');
       if (SHELLS.has(recv) || ['eval', 'source', '.'].includes(recv)) bodies.push(text);
+      else if (INTERPRETERS.has(recv.replace(/[0-9.]+$/, ''))) interpBodies.push(text);
       else if (!h.quoted) bodies.push(...extractSubstitutions(text));
     }
   }
-  return { text: out.join('\n'), bodies };
+  return { text: out.join('\n'), bodies, interpBodies };
 }
 
 function stripWrappers(tokens) {
@@ -193,19 +215,20 @@ function classifyPush(rest) {
   const pos = [];
   for (const a of rest) {
     if (a.startsWith('-')) {
-      if (!PUSH_OK_FLAGS.has(a)) return block(`git push con la opcion ${a} esta prohibido. ${hint}`);
+      if (!PUSH_OK_FLAGS.has(a)) return (FORCEISH.has(a) || a.startsWith('--force') ? grave : soft)(`git push con la opcion ${a} esta prohibido. ${hint}`);
       continue;
     }
     pos.push(a);
   }
-  if (pos.length !== 2) return block(`git push sin remoto y rama explicitos (o con varias ramas) esta prohibido. ${hint}`);
+  if (pos.some((x) => x.startsWith('+') || /(^|:)(main|master)$/.test(x))) return grave(`git push a main/master o con + esta prohibido. ${hint}`);
+  if (pos.length !== 2) return soft(`git push sin remoto y rama explicitos (o con varias ramas) esta prohibido. ${hint}`);
   const [remote, ref] = pos;
-  if (!REMOTE_RE.test(remote)) return block(`El remoto "${remote}" no es un nombre simple (URLs prohibidas). ${hint}`);
+  if (!REMOTE_RE.test(remote)) return grave(`El remoto "${remote}" no es un nombre simple (URLs prohibidas). ${hint}`);
   const parts = ref.split(':');
-  if (parts.length > 2) return block(`Refspec invalido. ${hint}`);
+  if (parts.length > 2) return soft(`Refspec invalido. ${hint}`);
   const [src, dst] = parts.length === 2 ? parts : [ref, ref];
   if (!AGENT_BRANCH_RE.test(dst) || !(src === 'HEAD' || AGENT_BRANCH_RE.test(src))) {
-    return block(`git push solo se permite a ramas factory/<job-id>; "${ref}" no cumple. Nunca a main/master. ${hint}`);
+    return soft(`git push solo se permite a ramas factory/<job-id>; "${ref}" no cumple. Nunca a main/master. ${hint}`);
   }
   return ok();
 }
@@ -213,7 +236,8 @@ function classifyPush(rest) {
 function classifyGit(args) {
   const { sub, rest } = gitSubcommand(args);
   if (!sub) return ok();
-  if (rest.includes('--no-verify')) return block('--no-verify esta prohibido (salta los hooks de proteccion).');
+  if (rest.includes('--no-verify')) return grave('--no-verify esta prohibido (salta los hooks de proteccion).');
+  if (args.some((a) => /hookspath/i.test(a))) return grave('Cambiar core.hooksPath (tambien con git -c) esta prohibido: desactiva los hooks.');
   switch (sub) {
     case 'push': return classifyPush(rest);
     case 'merge': return block('git merge esta prohibido para agentes. El merge lo hace un humano.');
@@ -231,7 +255,7 @@ function classifyGit(args) {
       const creates = rest.some((a) => ['-b', '-B', '-c', '-C', '--orphan', '--detach', '--'].includes(a));
       const target = rest.find((a) => !a.startsWith('-'));
       if (!creates && target && /^(main|master)$/.test(target)) {
-        return block(`branch-guard: no se permite cambiar a ${target}. Trabaja en una rama/worktree propia.`);
+        return soft(`branch-guard: no se permite cambiar a ${target}. Trabaja en una rama/worktree propia.`);
       }
       return ok();
     }
@@ -255,7 +279,7 @@ function classifyGh(args) {
     if (sub === 'ready') return block('gh pr ready esta prohibido: los PR quedan en borrador hasta que un humano decida.');
     if (sub === 'review' && rest.some((a) => a === '--approve' || a === '-a')) return block('Los agentes no pueden aprobar PRs.');
     if (sub === 'create' && !rest.some((a) => a === '--draft' || a === '-d')) {
-      return block('gh pr create solo se permite con --draft.');
+      return soft('gh pr create solo se permite con --draft.');
     }
     return ok();
   }
@@ -272,14 +296,94 @@ function classifyGh(args) {
   return ok();
 }
 
+
+/** Separa con un espacio los operadores > que van pegados a una palabra (echo x>f), respetando comillas. */
+function spaceRedirects(seg) {
+  let out = ''; let q = null;
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (q) { out += c; if (c === '\\' && q === '"' && i + 1 < seg.length) { out += seg[++i]; continue; } if (c === q) q = null; continue; }
+    if (c === '\\' && i + 1 < seg.length) { out += c + seg[++i]; continue; }
+    if (c === '"' || c === "'") { q = c; out += c; continue; }
+    if (c === '>' || (c === '&' && seg[i + 1] === '>')) {
+      const prev = out[out.length - 1];
+      if (prev && !/\s/.test(prev) && prev !== '>' && prev !== '&') {
+        const m = out.match(/(^|\s)(\d+)$/); // N> es descriptor, no se separa
+        if (!m) out += ' ';
+      }
+    }
+    out += c;
+  }
+  return out;
+}
+
+/** Destinos de redireccion (>, >>, &>, N>, >|) de un comando. Ignora duplicados de descriptor (2>&1, >&2, >&-). */
+export function redirectTargets(tokens) {
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const m = tokens[i].match(/^(\d*|&)(>>?|>\|)(.*)$/s);
+    if (!m) continue;
+    let rest = m[3];
+    if (rest.startsWith('&')) {
+      const fd = rest.slice(1);
+      if (/^(\d+|-)$/.test(fd)) continue; // 2>&1, >&2, >&-
+      rest = fd; // >&archivo (stdout+stderr al archivo)
+    }
+    if (!rest) rest = tokens[i + 1] || '';
+    if (rest) out.push(rest);
+  }
+  return out;
+}
+
+const pathHit = (a) => {
+  const x = String(a).replace(/^['"]|['"]$/g, '');
+  return isProtectedPath(x) || isProtectedPath(x.replace(/\/+$/, '') + '/');
+};
+const nonFlags = (args) => args.filter((a) => !a.startsWith('-'));
+// Comandos cuyo efecto es escribir/borrar/crear en TODOS sus argumentos de ruta.
+const WRITE_ANY = new Set(['tee', 'rm', 'rmdir', 'unlink', 'shred', 'chmod', 'chown', 'chgrp', 'ln', 'truncate', 'install', 'touch', 'mkdir', 'mv']);
+
+/** Devuelve la ruta protegida que este comando simple ESCRIBE (no la que solo lee o ejecuta). */
+function protectedWriteHit(t, tokens) {
+  for (const target of redirectTargets(tokens)) { const h = pathHit(target); if (h) return h; }
+  if (!t.length) return undefined;
+  const cmd = t[0].split('/').pop();
+  const args = t.slice(1);
+  if (WRITE_ANY.has(cmd)) { for (const a of nonFlags(args)) { const h = pathHit(a); if (h) return h; } }
+  if (cmd === 'cp') { const a = nonFlags(args); const h = a.length ? pathHit(a[a.length - 1]) : undefined; if (h) return h; }
+  if ((cmd === 'sed' || cmd === 'perl') && args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith('--in-place'))) {
+    for (const a of nonFlags(args)) { const h = pathHit(a); if (h) return h; }
+  }
+  if (cmd === 'dd') { for (const a of args) if (a.startsWith('of=')) { const h = pathHit(a.slice(3)); if (h) return h; } }
+  if (cmd === 'git') {
+    const { sub, rest } = gitSubcommand(args);
+    if (['restore', 'rm', 'mv', 'checkout', 'stash', 'apply', 'am'].includes(sub)) {
+      for (const a of nonFlags(rest)) { const h = pathHit(a); if (h) return h; }
+    }
+  }
+  return undefined;
+}
+
 function classifySimple(tokens, raw, opts, depth) {
   const head = tokens.filter((a) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(a));
   if (head[0] && head[0].split('/').pop() === 'env' && head.slice(1).every((a) => a.startsWith('-'))) {
-    return block('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
+    return grave('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
+  }
+  if (!opts.allowProtected) {
+    for (const tk of tokens) {
+      const m = tk.match(/^[A-Za-z_][A-Za-z0-9_]*=(.*)$/s);
+      if (m && (mentionsProtected(m[1]) || isEnvFile(m[1]))) return grave('Asignar una ruta protegida a una variable es un rodeo del guard (ej. CFG="opencode.json"). Pide el cambio al humano.');
+    }
   }
   const t = stripWrappers(tokens);
   if (!t.length) return ok();
   const cmd = t[0].split('/').pop();
+  if (!opts.allowProtected && INTERPRETERS.has(cmd.replace(/[0-9.]+$/, ''))) {
+    const ci = t.findIndex((a, i) => i > 0 && /^(-[a-zA-Z]*[ce]|-p|--eval|--print|--command)$/.test(a));
+    const code = ci >= 0 ? t.slice(ci + 1).join(' ') : '';
+    const hit = code && mentionsProtected(code);
+    if (hit) return grave(`El codigo en linea de ${cmd} menciona ${hit} (archivo protegido o .env). Eso es un rodeo del guard: pide el cambio al humano.`);
+  }
 
   if (SHELLS.has(cmd)) {
     const ci = t.findIndex((a) => /^-[a-zA-Z]*c$/.test(a));
@@ -296,17 +400,16 @@ function classifySimple(tokens, raw, opts, depth) {
     if (rec && force) return block('rm -rf esta prohibido.');
   }
   if (cmd === 'printenv' || (cmd === 'export' && t.slice(1).every((a) => a === '-p')) || (cmd === 'set' && t.length === 1)) {
-    return block('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
+    return grave('Listar variables de entorno esta prohibido (pueden contener el token del agente).');
   }
   if (/\$\{?(GH_TOKEN|GITHUB_TOKEN|GITHUB_PAT|[A-Z_]*API_KEY|[A-Z_]*SECRET[A-Z_]*)\b/.test(raw) || /\/proc\/[^\s]*environ/.test(raw)) {
-    return block('Leer o imprimir tokens/secretos del entorno esta prohibido.');
+    return grave('Leer o imprimir tokens/secretos del entorno esta prohibido.');
   }
-  if (!ENV_OK.has(cmd) && t.slice(1).some(isEnvFile)) return block('Leer o copiar archivos .env esta prohibido.');
+  if (!ENV_OK.has(cmd) && t.slice(1).some(isEnvFile)) return grave('Leer o copiar archivos .env esta prohibido.');
 
   if (!opts.allowProtected) {
-    const mentions = PROTECTED_PATHS.find((p) => raw.includes(p));
-    const writes = /\b(tee|cp|mv|rm|chmod|chown|ln|truncate|dd|install)\b|\bsed\s+[^|;&]*-[a-zA-Z]*i|\bperl\s+[^|;&]*-[a-zA-Z]*i|>/.test(raw);
-    if (mentions && writes) return block(`Modificar ${mentions} esta prohibido para agentes (archivo protegido de la factory).`);
+    const hit = protectedWriteHit(t, tokens);
+    if (hit) return grave(`Modificar ${hit} esta prohibido para agentes (archivo protegido de la factory). Leer o ejecutar esa ruta SI esta permitido.`);
   }
   return ok();
 }
@@ -316,13 +419,22 @@ export function classifyBash(command, opts = {}, depth = 0) {
     return block('No pude leer el comando bash (formato de herramienta inesperado). Bloqueado por seguridad.');
   }
   if (depth > MAX_DEPTH) return block('Comando demasiado anidado. Bloqueado por seguridad.');
-  const { text, bodies } = splitHeredocs(command);
+  if (!opts.allowProtected && BACKDOOR_RE.test(command)) {
+    return grave('Mencionar factory-maint, FACTORY_GUARD_ALLOW_PROTECTED_EDIT o FACTORY_HUMAN esta prohibido para agentes: desactivan las protecciones.');
+  }
+  const { text, bodies, interpBodies } = splitHeredocs(command);
+  if (!opts.allowProtected) {
+    for (const body of interpBodies) {
+      const hit = mentionsProtected(body);
+      if (hit) return grave(`El codigo ejecutado por un interprete menciona ${hit} (archivo protegido o .env). Eso es un rodeo del guard: pide el cambio al humano.`);
+    }
+  }
   for (const inner of [...extractSubstitutions(text), ...bodies]) {
     const r = classifyBash(inner, opts, depth + 1);
     if (r.blocked) return r;
   }
-  for (const seg of splitSegments(text)) {
-    const r = classifySimple(tokenize(seg), seg, opts, depth);
+  for (const seg of splitSegments(text.replace(/>\|/g, '>'))) {
+    const r = classifySimple(tokenize(spaceRedirects(seg)), seg, opts, depth);
     if (r.blocked) return r;
   }
   return ok();
@@ -348,16 +460,16 @@ export function classifyTool(tool, args = {}, opts = {}) {
   const name = String(tool || '').toLowerCase();
   if (READ_TOOLS.has(name)) {
     const target = args.filePath || args.path || args.pattern || '';
-    if (isEnvFile(target)) return block('Leer archivos .env esta prohibido.');
+    if (isEnvFile(target)) return grave('Leer archivos .env esta prohibido.');
   }
   if (WRITE_TOOLS.has(name)) {
     const paths = targetPaths(name, args);
     if (!paths.length) return block(`No pude determinar que archivo modifica la herramienta ${name}. Bloqueado por seguridad.`);
     for (const target of paths) {
-      if (isEnvFile(target)) return block('Escribir archivos .env esta prohibido.');
+      if (isEnvFile(target)) return grave('Escribir archivos .env esta prohibido.');
       if (!opts.allowProtected) {
-        const hit = PROTECTED_PATHS.find((p) => target.includes(p));
-        if (hit) return block(`Modificar ${hit} esta prohibido para agentes (archivo protegido de la factory).`);
+        const hit = isProtectedPath(target);
+        if (hit) return grave(`Modificar ${hit} esta prohibido para agentes (archivo protegido de la factory).`);
       }
     }
   }

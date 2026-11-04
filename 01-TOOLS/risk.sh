@@ -9,21 +9,19 @@
 #
 # Variables opcionales: FACTORY_JOBS_DIR, FACTORY_CONFIG, FACTORY_BASE (rama base), FACTORY_HEAD
 set -uo pipefail
-
-# Sin colores ANSI: node -p pinta numeros/booleanos si FORCE_COLOR esta activo en el entorno
-unset FORCE_COLOR; export NO_COLOR=1 NODE_DISABLE_COLORS=1
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCOPE_JS="${HERE}/../factory/scripts/scope-check.mjs"
 
 JOB_ID="${1:?Uso: risk.sh <job-id>}"
-JOBS_DIR="${FACTORY_JOBS_DIR:-factory/jobs}"
+JOBS_DIR="$(factory_jobs_dir)"
 CONFIG="${FACTORY_CONFIG:-factory/config.json}"
 JOB_DIR="${JOBS_DIR}/${JOB_ID}"
 HEAD_REF="${FACTORY_HEAD:-HEAD}"
 
 [ -d "$JOB_DIR" ] || { echo "ERROR: el job ${JOB_ID} no existe en ${JOB_DIR}" >&2; exit 2; }
 
-cfg() { # cfg <expresion js sobre c> <defecto>
-  node -p "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG','utf8'));const v=($1);String(v===undefined||v===null?'$2':v)}catch(e){String('$2')}" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -m1 . || echo "$2"
-}
+cfg() { factory_cfg "$@"; }
 MAX_DIFF_LINES="$(cfg 'c.max_diff_lines' 400)"
 MIN_SCORE="$(cfg '(c.fast_path||{}).min_score' 0.85)"
 FAST_PATH_ENABLED="$(cfg '(c.fast_path||{}).enabled' false)"
@@ -68,6 +66,8 @@ DECISION="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/decision.md" 2>/dev/null | 
 [ "$DECISION" = "APPROVE" ] || add "approver_no_aprueba" "decision.md: '${DECISION:-ausente}' (se exige APPROVE)"
 GATE="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/gate.md" 2>/dev/null | trim || true)"
 [ "$GATE" = "GATE: PASS" ] || add "gate_no_pasa" "gate.md: '${GATE:-ausente}' (se exige GATE: PASS)"
+UNV="$(sed -n 's/^UNVERIFIED_TESTS:[[:space:]]*//p' "${JOB_DIR}/gate.md" 2>/dev/null | head -1 | trim)"
+[ -z "$UNV" ] || add "tests_cambiados_sin_ejecutar" "El gate no pudo ejecutar estos tests cambiados: ${UNV}"
 
 # ---------- 3. Diff real ----------
 BASE_OK=""
@@ -81,6 +81,21 @@ else
   FILES="$(printf '%s\n' "$NUMSTAT" | awk 'NF>=3{print $3}')"
   DIFF_LINES="$(printf '%s\n' "$NUMSTAT" | awk 'NF>=3{ if($1!="-") a+=$1; if($2!="-") d+=$2 } END{print a+d+0}')"
   [ -z "$FILES" ] && add "diff_vacio" "El diff contra ${BASE_OK} esta vacio"
+
+  # Alcance declarado en el spec: archivos fuera de la lista (sobre todo BORRADOS) => humano
+  SPEC="${JOB_DIR}/spec.md"
+  MB="$(git merge-base "$BASE_OK" "$HEAD_REF" 2>/dev/null || true)"
+  if [ ! -f "$SPEC" ]; then add "sin_spec" "No existe spec.md: no se puede comprobar el alcance"
+  elif [ -n "$MB" ]; then
+    SC_OUT="$(node "$SCOPE_JS" changes "$MB" 2>/dev/null | node "$SCOPE_JS" check "$SPEC")"; SC_RC=$?
+    if [ "$SC_RC" -eq 2 ]; then add "sin_alcance_definido" "${SC_OUT}"
+    elif [ "$SC_RC" -eq 1 ]; then
+      DELS="$(printf '%s\n' "$SC_OUT" | awk -F'\t' '$1=="BORRADO_FUERA_DE_ALCANCE"{print $2}' | head -5 | paste -sd, -)"
+      OUTS="$(printf '%s\n' "$SC_OUT" | awk -F'\t' '$1=="FUERA_DE_ALCANCE"{print $2}' | head -5 | paste -sd, -)"
+      [ -n "$DELS" ] && add "borrado_fuera_de_alcance" "Archivos borrados fuera del alcance del spec: ${DELS}"
+      [ -n "$OUTS" ] && add "diff_fuera_de_alcance" "Archivos cambiados fuera del alcance del spec: ${OUTS}"
+    fi
+  fi
   [ "$DIFF_LINES" -gt "$MAX_DIFF_LINES" ] && add "diff_excede_limite" "Diff: ${DIFF_LINES} lineas > ${MAX_DIFF_LINES}"
 
   SENS_RE='(^|/)(auth|authn|authz|login|session|oauth|payments?|billing|checkout|pagos?|migrations?|migraci[oó]n|secrets?|credentials?)([/._-]|$)|\.github/workflows|(^|/)ci/|(^|/)deploy|dockerfile|docker-compose|terraform|\.tf$|(^|/)(helm|k8s|kubernetes|infra)(/|$)|(^|/)\.env'

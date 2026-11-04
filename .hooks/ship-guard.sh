@@ -5,7 +5,8 @@
 set -euo pipefail
 unset FORCE_COLOR; export NO_COLOR=1 NODE_DISABLE_COLORS=1
 JOB_ID="${1:?Falta ID de job}"
-JOB_DIR="${FACTORY_JOBS_DIR:-factory/jobs}/${JOB_ID}"
+source "$(dirname "${BASH_SOURCE[0]}")/../01-TOOLS/lib.sh"
+JOB_DIR="$(factory_jobs_dir)/${JOB_ID}"
 CONFIG="${FACTORY_CONFIG:-factory/config.json}"
 first() { grep -m1 -v '^[[:space:]]*$' "$1" 2>/dev/null | sed 's/\r$//; s/[[:space:]]*$//' || true; }
 

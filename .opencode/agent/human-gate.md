@@ -6,7 +6,7 @@ temperature: 0.2
 permission:
   edit:
     "*": deny
-    "factory/jobs/*/human.md": allow
+    "*factory/jobs/*/human.md": allow
   bash:
     "*": deny
     "git diff*": allow

@@ -10,6 +10,9 @@ if git diff --cached -U0 | grep -E '^\+' | grep -Eq -- '-----BEGIN [A-Z ]*PRIVAT
 fi
 [ "${FACTORY_HUMAN:-0}" = "1" ] && exit 0
 BRANCH="$(git symbolic-ref --short -q HEAD || echo '')"
+if [[ "$BRANCH" == factory/* ]] && [ "$(git rev-parse --path-format=absolute --git-dir)" = "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
+  echo "pre-commit: las ramas factory/* se commitean solo dentro de su worktree (factory/worktrees/<job-id>). Crea una con: bash 01-TOOLS/new-job.sh <job-id>" >&2; exit 1
+fi
 case "$BRANCH" in
   main|master) echo "pre-commit: commits directos a ${BRANCH} bloqueados. Usa una rama (humano: FACTORY_HUMAN=1)." >&2; exit 1 ;;
 esac
