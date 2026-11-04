@@ -100,10 +100,27 @@ test('11 ADR: si el spec declara ADR, decisions.md debe tener "## ADR-N: <titulo
   let r = f.ns(); delegate(r, 'memory-curator'); assert.match(r.why.join(), /decisions\.md no tiene un '## ADR-N: Usar clamp central'/);
   assert.match(r.first, /decisions\.md$/); assert.match(r.first, /## ADR-008: Usar clamp central/);
   const g = upToHuman(FULL, { adr: 'Usar clamp central' }); g.curate({}); // el fixture lo escribe
-  assert.match(fs.readFileSync(path.join(g.wt, '02-DOCS/wiki/sdd/decisions.md'), 'utf8'), /## ADR-008: Usar clamp central\nEstado: Propuesto/);
+  assert.match(fs.readFileSync(path.join(g.wt, '02-DOCS/wiki/sdd/decisions.md'), 'utf8'), /## ADR-008: Usar clamp central\nEstado: Aprobado/);
   runCmd(g.ns(), /commit-brain\.sh/);
   const h = upToHuman(FULL, { adr: 'Usar clamp central' }); h.curate(); put(path.join(h.job, 'trace.md'), '# t\nBrain: 02-DOCS/wiki/jobs/job-1.md, 02-DOCS/wiki/index.md\n');
   r = h.ns(); delegate(r, 'memory-curator'); assert.match(r.why.join(), /debe incluir 02-DOCS\/wiki\/sdd\/decisions\.md/);
+});
+test('11 ADR: el estado lo fija el flujo, no el curator. Con spec.ok => Aprobado; sin spec.ok en el proyecto => Propuesto', () => {
+  const a = upToHuman(FULL, { adr: 'Usar clamp central' }); a.curate({ adrStatus: 'Propuesto' });                       // curator tibio: lo deja Propuesto
+  let r = a.ns(); delegate(r, 'memory-curator'); assert.match(r.why.join(), /debe llevar 'Estado: Aprobado'/); assert.match(r.why.join(), /spec\.ok/);
+  assert.match(r.first, /'Estado: Aprobado'/);
+  const b = upToHuman(FULL, { adr: 'Usar clamp central' }); b.curate({ adrStatus: 'Aprobado ' });                       // con texto detras tambien vale
+  runCmd(b.ns(), /commit-brain/);
+  const c = upToHuman(FULL, { adr: 'Usar clamp central' }); c.curate({ adrStatus: 'Aceptado' }); delegate(c.ns(), 'memory-curator');
+  // sin spec.ok en el proyecto nadie aprobo nada: el ADR debe quedar Propuesto y Aprobado se rechaza
+  const P = { ...FULL, require_spec_ok: false };
+  const d = upToHuman(P, { adr: 'Usar clamp central' }); d.curate({ adrStatus: 'Aprobado' }); r = d.ns(); delegate(r, 'memory-curator'); assert.match(r.why.join(), /debe llevar 'Estado: Propuesto'/);
+  const e = upToHuman(P, { adr: 'Usar clamp central' }); e.curate({ adrStatus: 'Propuesto' }); runCmd(e.ns(), /commit-brain/);
+});
+test('11 ADR: el estado se lee del bloque del ADR NUEVO, no de otro ADR con "Estado: Aprobado" en decisions.md', () => {
+  const f = upToHuman(FULL, { adr: 'Usar clamp central' }); f.curate({ adrStatus: 'Propuesto' });   // ADR-007 previo SI es Aprobado
+  assert.match(fs.readFileSync(path.join(f.wt, '02-DOCS/wiki/sdd/decisions.md'), 'utf8'), /ADR-007: algo previo\nEstado: Aprobado/);
+  delegate(f.ns(), 'memory-curator');
 });
 test('11: sin ADR declarado, decisions.md no se exige', () => { const f = upToHuman(); f.curate(); runCmd(f.ns(), /commit-brain\.sh/); });
 
@@ -142,5 +159,5 @@ test('E2E full: analisis -> diseno -> desarrollo -> pruebas -> revision -> docum
   let at = -1; for (const re of order) { const i = actions.findIndex((a, n) => n > at && re.test(a.first)); assert.ok(i > at, `falta o desordenado ${re}`); at = i; }
   assert.ok(gh.created()); const files = git(f.wt, 'diff', '--name-only', 'origin/main...HEAD').trim().split('\n').sort();
   assert.deepEqual(files, ['02-DOCS/wiki/index.md', '02-DOCS/wiki/jobs/clamp-numeros-261104-ab12.md', '02-DOCS/wiki/sdd/decisions.md', 'src/feature.js']);
-  assert.match(fs.readFileSync(path.join(f.wt, '02-DOCS/wiki/sdd/decisions.md'), 'utf8'), /## ADR-008: Usar clamp central\nEstado: Propuesto/);
+  assert.match(fs.readFileSync(path.join(f.wt, '02-DOCS/wiki/sdd/decisions.md'), 'utf8'), /## ADR-008: Usar clamp central\nEstado: Aprobado/);
 });

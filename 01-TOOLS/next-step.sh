@@ -296,6 +296,8 @@ TRACE="${JOB_DIR}/trace.md"
 JOB_PAGE="02-DOCS/wiki/jobs/${JOB_ID}.md"
 ADR_TITLE="$(node "$SPEC_LINT" adr "$SPEC" 2>/dev/null | head -1 | trim)"; [ -n "$ADR_TITLE" ] || ADR_TITLE=none
 NEXT_ADR="$(sed -n 's/^## ADR-0*\([0-9][0-9]*\):.*/\1/p' "${WT}/02-DOCS/wiki/sdd/decisions.md" 2>/dev/null | sort -n | tail -1)"; NEXT_ADR="$(printf '%03d' $(( 10#${NEXT_ADR:-0} + 1 )))"
+if [ "$REQUIRE_SPEC_OK" = "1" ]; then ADR_STATUS=Aprobado; ADR_WHY="el humano confirmo el spec con spec.ok: esa confirmacion aprueba la decision, no hay otro paso manual"
+else ADR_STATUS=Propuesto; ADR_WHY="este proyecto no exige spec.ok, asi que nadie aprobo la decision: la aprueba el humano al revisar el PR"; fi
 brain_problem() { # imprime por que el Brain/trace no sirve (vacio = valido)
   [ -f "$TRACE" ] || { echo "falta trace.md"; return; }
   grep -q '^Brain: .' "$TRACE" || { echo "trace.md sin linea 'Brain: <paginas>'"; return; }
@@ -323,13 +325,16 @@ brain_problem() { # imprime por que el Brain/trace no sirve (vacio = valido)
   if [ "$ADR_TITLE" != "none" ]; then
     case "$listed" in *" 02-DOCS/wiki/sdd/decisions.md "*) ;; *) echo "el spec declara 'ADR: ${ADR_TITLE}': la linea Brain: debe incluir 02-DOCS/wiki/sdd/decisions.md"; return ;; esac
     grep -E '^## ADR-[0-9]+:' "${WT}/02-DOCS/wiki/sdd/decisions.md" | grep -qiF -- "$ADR_TITLE" || { echo "decisions.md no tiene un '## ADR-N: ${ADR_TITLE}'"; return; }
+    # El estado del ADR no lo decide el curator: lo fija la aprobacion humana del flujo (spec.ok confirma el diseño y la decision).
+    ADR_BLOCK="$(awk -v t="$ADR_TITLE" '/^## ADR-[0-9]+:/ { if (inb) exit; if (index(tolower($0), tolower(t))) { inb=1; next } } inb && /^## / { exit } inb { print }' "${WT}/02-DOCS/wiki/sdd/decisions.md")"
+    printf '%s\n' "$ADR_BLOCK" | grep -qE "^Estado:[[:space:]]*${ADR_STATUS}\b" || { echo "el ADR '${ADR_TITLE}' debe llevar 'Estado: ${ADR_STATUS}' (${ADR_WHY})"; return; }
   fi
 }
 BP="$(brain_problem)"
 if [ -n "$BP" ]; then
   WHAT="actualizar el Brain EN LA WORKTREE (solo ${JOB_PAGE}, index.md y decisions.md) y completar trace.md con una linea 'Brain: <paginas separadas por coma, o sin cambios>'"
   [ "$SPEC_PROFILE" != "full" ] || WHAT="escribir ${JOB_PAGE} en la worktree (## Resumen, Actores, Requisitos funcionales, Diseño, Implementación, Pruebas citando el COMMIT de gate.md, Lecciones), enlazarla en index.md y completar trace.md con 'Brain: <paginas>'"
-  [ "$ADR_TITLE" = "none" ] || WHAT="${WHAT}; registrar en decisions.md '## ADR-${NEXT_ADR}: ${ADR_TITLE}' con Estado: Propuesto"
+  [ "$ADR_TITLE" = "none" ] || WHAT="${WHAT}; registrar en decisions.md '## ADR-${NEXT_ADR}: ${ADR_TITLE}' con 'Estado: ${ADR_STATUS}' (${ADR_WHY})"
   FILES="factory/jobs/${JOB_ID}/trace.md,factory/worktrees/${JOB_ID}/${JOB_PAGE},factory/worktrees/${JOB_ID}/02-DOCS/wiki/index.md"
   [ "$ADR_TITLE" = "none" ] || FILES="${FILES},factory/worktrees/${JOB_ID}/02-DOCS/wiki/sdd/decisions.md"
   delegate memory-curator "$WHAT" "$FILES" "$BP"

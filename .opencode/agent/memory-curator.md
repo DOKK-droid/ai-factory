@@ -35,7 +35,7 @@ Rutas **dentro de la worktree** `factory/worktrees/<id>/`:
 
 1. `02-DOCS/wiki/jobs/<id>.md`, con la estructura de `sdd/job-page-template.md`: Resumen, Actores, Requisitos funcionales, Diseño, Implementación, Pruebas, Lecciones.
 2. `02-DOCS/wiki/index.md`: enlaza la página nueva (una fila).
-3. `02-DOCS/wiki/sdd/decisions.md`: **solo si el spec declara `ADR: <título>`**. Añade `## ADR-N: <título>` con el número que te indica el orchestrator, `Fecha`, `Estado: Propuesto`, Contexto, Decisión, Alternativas y Consecuencias. Nunca marques un ADR como `Aprobado`: lo hace el humano al fusionar.
+3. `02-DOCS/wiki/sdd/decisions.md`: **solo si el spec declara `ADR: <título>`**. Añade `## ADR-N: <título>` con el número que te indica el orchestrator, `Fecha`, `Estado`, Contexto, Decisión, Alternativas y Consecuencias. **El `Estado` no lo eliges tú**: el orchestrator te lo indica (`Aprobado` si el humano confirmó el spec con `spec.ok`, porque esa confirmación aprueba la decisión; `Propuesto` si el proyecto no exige `spec.ok`). `next-step.sh` comprueba que el estado es el indicado.
 4. `factory/jobs/<id>/trace.md`: Issue → Spec → Rama → Reviews → Decisión → PR, y una línea final `Brain: <páginas que escribiste, separadas por coma, o sin cambios>`.
 
 No escribes en ningún otro lugar del Brain ni en el código. No hagas `git add` ni `git commit`: lo hace `commit-brain.sh`.
