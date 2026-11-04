@@ -44,6 +44,10 @@ test('builder: cada PROTECTED_PATH esta denegado (relativa y absoluta)', () => {
 
 const TABLE = [
   ['bash 01-TOOLS/new-job.sh job-1 2>&1', 'orchestrator'],
+  ['cd factory/worktrees/job-1', 'orchestrator'],
+  ['cd factory/worktrees/job-1 && bash 01-TOOLS/checks.sh job-1 2>&1', 'orchestrator'],
+  ['cd factory/worktrees/job-1 && bash 01-TOOLS/launch-reviewers.sh job-1 1 2>&1', 'orchestrator'],
+  ['cd factory/worktrees/job-1 && bash 01-TOOLS/risk.sh job-1 2>&1', 'orchestrator'],
   ['bash .hooks/spec-first-gate.sh 2>&1', 'orchestrator'],
   ['bash 01-TOOLS/checks.sh job-1 2>&1', 'orchestrator'],
   ['bash 01-TOOLS/launch-reviewers.sh job-1 1 2>&1', 'orchestrator'],
@@ -70,7 +74,7 @@ const PRODUCES = [
   ['intake', 'factory/jobs/j/input.md'], ['spec-writer', 'factory/jobs/j/spec.md'], ['spec-writer', 'factory/jobs/j/tasks.md'],
   ['approver', 'factory/jobs/j/decision.md'], ['human-gate', 'factory/jobs/j/human.md'],
   ['memory-curator', 'factory/jobs/j/trace.md'], ['memory-curator', '02-DOCS/wiki/index.md'],
-  ['orchestrator', 'factory/jobs/j/job.json'], ['orchestrator', 'factory/jobs/j/trace.md'],
+  ['orchestrator', 'factory/jobs/j/trace.md'],
 ];
 for (const [agent, file] of PRODUCES) {
   test(`${agent} puede escribir ${file} (ruta relativa y absoluta) y el guard lo acepta`, () => {
@@ -90,7 +94,7 @@ test('los reviewers no escriben ni ejecutan: el script guarda sus reviews', () =
 
 test('el orchestrator no puede escribir contenido de otros agentes', () => {
   const r = perms('orchestrator').edit;
-  for (const f of ['spec.md', 'tasks.md', 'decision.md', 'human.md', 'input.md']) assert.equal(decide(r, 'factory/jobs/j/' + f, 'deny'), 'deny', f);
+  for (const f of ['spec.md', 'tasks.md', 'decision.md', 'human.md', 'input.md', 'gate.md', 'job.json', 'round-1/review-code.md']) assert.equal(decide(r, 'factory/jobs/j/' + f, 'deny'), 'deny', f);
   assert.equal(decide(r, 'src/app.js', 'deny'), 'deny');
 });
 
