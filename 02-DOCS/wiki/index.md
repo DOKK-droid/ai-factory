@@ -12,6 +12,7 @@
 | plantilla de job | `02-DOCS/wiki/sdd/job-page-template.md` | Estructura de la página que documenta cada job |
 | glosario | `02-DOCS/wiki/sdd/glossary.md` | Términos del proyecto |
 | documentación por job | `02-DOCS/wiki/jobs/<id>.md` | Qué se construyó, diseño, pruebas (con el commit del gate) y lecciones de cada job; viaja en el PR del job |
+| job: clamp(n, min, max) | `02-DOCS/wiki/jobs/clamp-numeros-test-261104-133f.md` | Utilidad `clamp` en `src/clamp.js` con test `node:test`; gate PASS 6/6 sobre `4c50d00`; APPROVE con pendiente TDD para el humano |
 | errores recurrentes | `02-DOCS/wiki/sdd/errors.md` | Errores recurrentes y cómo se resolvieron |
 | incidentes por zona | `02-DOCS/wiki/sdd/incidents.md` | Incidentes registrados por zona de código |
 | installation plan | `02-DOCS/wiki/harness/installation-plan.md` | Plan de instalación RSC |
