@@ -1,147 +1,125 @@
 #!/usr/bin/env bash
+# launch-reviewers.sh — lanza los 4 reviewers (security, ux, ui, code) con el DIFF REAL del job.
+# Uso (desde la worktree del job):  bash 01-TOOLS/launch-reviewers.sh <job-id> [round]
 #
-# launch-reviewers.sh — Lanza los 4 revisores en paralelo con controles de robustez.
+# Diseno (corrige el script anterior):
+#  * El reviewer recibe spec + gate.md + el diff real (git). NO recibe la narracion del builder (build.md).
+#  * El reviewer NO escribe nada: el SCRIPT guarda su respuesta como review-<rol>.md. No necesita bash ni edit.
+#  * Se borra cualquier review previo antes de lanzar (un archivo viejo no puede pasar la validacion).
+#  * Si la respuesta no cumple el formato: 1 reintento; si sigue mal => `VERDICT: CHANGES`, `SCORE: 0` (falla cerrado).
+#  * No se mata ningun proceso ajeno: solo los PID lanzados aqui. Limite total (REVIEW_TIMEOUT_SECS) y por inactividad.
+#  * Se comprueba que los IDs de modelo existen en `opencode models` antes de gastar nada.
+#  * No se lanzan reviewers si el gate no paso (ahorra tokens).
 #
-# Uso: bash 01-TOOLS/launch-reviewers.sh <job-id> <round>
-#
-# Variables de entorno:
-#   OPENCODE_BIN        ruta al binario opencode (default: opencode)
-#   REVIEW_TIMEOUT_SECS timeout por revisor en segundos (default: 600 = 10 min)
-#
-# Qué hace:
-#   1. Limpia procesos opencode zombies previos.
-#   2. Lee spec.md y build.md del job para construir el prompt de cada revisor.
-#   3. Extrae el modelo de cada archivo de agente.
-#   4. Lanza los 4 revisores EN PARALELO con:
-#        - --pure --auto (sin prompts interactivos que cuelguen la ejecución)
-#        - timeout por revisor (evita que uno se cuelgue para siempre)
-#   5. Espera a que terminen los 4.
-#   6. Verifica que cada review-<x>.md tenga VERDICT en línea 1 y SCORE en línea 2.
-#   7. Limpia zombies al finalizar.
-#
-# Salida: código 0 si los 4 revisores produjeron review válida; código 1 si falló alguno.
-
+# Variables: REVIEW_TIMEOUT_SECS (36000) REVIEW_IDLE_SECS (1800; 0 = sin vigilante) REVIEW_POLL_SECS (5)
+#            REVIEW_MAX_PARALLEL (2) REVIEW_MAX_DIFF_BYTES (120000) REVIEW_RETRIES (1)
+#            REVIEW_PURE (1) REVIEW_AUTO (1) OPENCODE_BIN (opencode) FACTORY_SKIP_MODEL_CHECK (0)
+# Salida: 0 = 4 reviews validos y del modelo; 1 = no se pudo empezar; 3 = algun reviewer fallo (hay review fail-closed)
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCOPE_JS="${HERE}/../factory/scripts/scope-check.mjs"
+MODELS_JS="${HERE}/../factory/scripts/validate-models.mjs"
 
-JOB_ID="${1:?Uso: bash 01-TOOLS/launch-reviewers.sh <job-id> <round>}"
-ROUND="${2:-1}"
-OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
-TIMEOUT_SECS="${REVIEW_TIMEOUT_SECS:-36000}"
+JOB_ID="${1:?Uso: launch-reviewers.sh <job-id> [round]}"
+JOB_DIR="$(factory_jobs_dir)/${JOB_ID}"
+ROLES=(security ux ui code)
+TIMEOUT="${REVIEW_TIMEOUT_SECS:-36000}"; IDLE="${REVIEW_IDLE_SECS:-1800}"; POLL="${REVIEW_POLL_SECS:-5}"
+MAXPAR="${REVIEW_MAX_PARALLEL:-2}"; MAXDIFF="${REVIEW_MAX_DIFF_BYTES:-120000}"; RETRIES="${REVIEW_RETRIES:-1}"
+OC="${OPENCODE_BIN:-opencode}"
 
-# Rutas construidas dinámicamente
-A_DIR=".opencode"; B_DIR="agent"; AGENT_DIR="${A_DIR}/${B_DIR}"
-F_DIR="factory"; J_DIR="jobs"; JOB_DIR="${F_DIR}/${J_DIR}/${JOB_ID}"
-ROUND_DIR="${JOB_DIR}/round-${ROUND}"
+[ -d "$JOB_DIR" ] || { echo "ERROR: no existe ${JOB_DIR}" >&2; exit 1; }
+[ -f "${JOB_DIR}/spec.md" ] || { echo "ERROR: falta spec.md" >&2; exit 1; }
+[ "$(head -1 "${JOB_DIR}/gate.md" 2>/dev/null | tr -d '\r')" = "GATE: PASS" ] || { echo "ERROR: el gate no paso (gate.md != GATE: PASS); no se lanzan reviewers" >&2; exit 1; }
+if [ -n "${2:-}" ]; then ROUND="$2"
+else last="$(ls -d "${JOB_DIR}"/round-* 2>/dev/null | sort -V | tail -1)"; ROUND=$(( $(basename "${last:-round-0}" | sed 's/round-//') + 1 )); fi
+ROUND_DIR="${JOB_DIR}/round-${ROUND}"; mkdir -p "$ROUND_DIR"
 
-mkdir -p "$ROUND_DIR"
-
-echo "=== Lanzando 4 revisores en paralelo (job=${JOB_ID}, round=${ROUND}, timeout=${TIMEOUT_SECS}s) ==="
-
-# ── 1. Limpiar zombies previos ──────────────────────────────────────────────
-pkill -f "opencode run" 2>/dev/null || true
-sleep 1
-
-# ── 2. Leer insumos del job ─────────────────────────────────────────────────
-SPEC=""
-BUILD=""
-if [ -f "${JOB_DIR}/spec.md" ]; then
-  SPEC=$(cat "${JOB_DIR}/spec.md")
-fi
-if [ -f "${JOB_DIR}/build.md" ]; then
-  BUILD=$(cat "${JOB_DIR}/build.md")
+if [ "${FACTORY_SKIP_MODEL_CHECK:-0}" != "1" ]; then
+  node "$MODELS_JS" --agents reviewer-security,reviewer-ux,reviewer-ui,reviewer-code || { echo "ERROR: modelos de reviewers no validos; abortado" >&2; exit 1; }
 fi
 
-# ── 3. Función: lanzar un revisor ───────────────────────────────────────────
-launch_reviewer() {
-  local role="$1"
-  local agent_file="${AGENT_DIR}/reviewer-${role}.md"
-  local review_file="${ROUND_DIR}/review-${role}.md"
-  local stdout_file="${ROUND_DIR}/${role}.stdout"
-  local start_time end_time elapsed
+# ---- Contexto: spec + gate + DIFF REAL (nunca la prosa del builder) ----
+MB="$(factory_merge_base || true)"; [ -n "$MB" ] || { echo "ERROR: no pude calcular el merge-base con la rama base" >&2; exit 1; }
+CTX="${ROUND_DIR}/context.md"
+{
+  echo "# SPEC"; cat "${JOB_DIR}/spec.md"
+  echo; echo "# GATE (salida determinista, verificada por script)"; sed -n '1,60p' "${JOB_DIR}/gate.md"
+  echo; echo "# ARCHIVOS CAMBIADOS (git, vs ${MB:0:7})"; git diff --stat "$MB" | tail -n 40
+  UNT="$(git ls-files --others --exclude-standard | head -20)"; [ -z "$UNT" ] || { echo "Sin seguimiento:"; echo "$UNT"; }
+  echo; echo "# DIFF REAL"
+  git diff -U3 "$MB" | head -c "$MAXDIFF"
+  [ "$(git diff -U3 "$MB" | wc -c)" -le "$MAXDIFF" ] || echo $'\n[DIFF TRUNCADO a '"${MAXDIFF}"$' bytes: revisa tambien el listado de archivos de arriba]'
+  while IFS= read -r f; do [ -f "$f" ] && { echo; echo "--- NUEVO (sin commitear): $f ---"; head -c 8000 "$f"; }; done <<< "$UNT"
+} > "$CTX"
 
-  # Extraer modelo del frontmatter del agente
-  local model=""
-  if [ -f "$agent_file" ]; then
-    model=$(grep -m1 '^model:' "$agent_file" | sed 's/^model:[[:space:]]*//' | tr -d '[:space:]')
-  fi
-  if [ -z "$model" ]; then
-    echo "FAIL: reviewer-${role} no tiene modelo en ${agent_file}"
-    return 1
-  fi
+declare -A PID_ROLE=()
+cleanup() { for p in "${!PID_ROLE[@]}"; do kill -TERM "$p" 2>/dev/null; done; }
+trap cleanup INT TERM
 
-  # Construir prompt
-  local prompt="Eres el revisor ${role} de la AI Factory. Revisa el siguiente job y escribe tu informe en ${review_file}.
-
-SPEC:
-${SPEC}
-
-BUILD:
-${BUILD}
-
-Reglas de salida:
-- Línea 1: VERDICT: PASS | CHANGES | PASS (n/a)
-- Línea 2: SCORE: 0-1
-- Luego los hallazgos y recomendaciones.
-No uses herramientas, no edites archivos, solo escribe el informe."
-
-  start_time=$(date +%s)
-
-  # Lanzar con timeout, --pure --auto (sin prompts interactivos)
-  timeout --signal=KILL "$TIMEOUT_SECS" "$OPENCODE_BIN" run --pure --auto \
-    --agent "reviewer-${role}" --model "$model" "$prompt" \
-    > "$stdout_file" 2>&1 || true
-
-  end_time=$(date +%s)
-  elapsed=$((end_time - start_time))
-
-  # Verificar formato del review
-  if [ -f "$review_file" ]; then
-    local first_line second_line
-    first_line=$(head -1 "$review_file" | tr -d '\r')
-    second_line=$(sed -n '2p' "$review_file" | tr -d '\r')
-    if echo "$first_line" | grep -qE "^VERDICT:"; then
-      if echo "$second_line" | grep -qE "^SCORE:"; then
-        echo "OK: reviewer-${role} -> ${first_line} | ${second_line} (${elapsed}s)"
-        return 0
-      else
-        echo "WARN: reviewer-${role} tiene VERDICT pero no SCORE en línea 2 (${elapsed}s)"
-        return 1
-      fi
-    else
-      echo "WARN: reviewer-${role} no tiene VERDICT en línea 1 (tiene: ${first_line}) (${elapsed}s)"
-      return 1
-    fi
-  else
-    echo "FAIL: reviewer-${role} no produjo ${review_file} (${elapsed}s)"
-    return 1
-  fi
+valid_review() { # valid_review <archivo>
+  [ -s "$1" ] && head -1 "$1" | grep -qE '^VERDICT: (PASS|CHANGES|PASS \(n/a\))$' && sed -n 2p "$1" | grep -qE '^SCORE: (0(\.[0-9]+)?|1(\.0+)?)$'
 }
 
-# ── 4. Lanzar los 4 revisores EN PARALELO ───────────────────────────────────
-declare -A RESULTS
-for role in security ux ui code; do
-  launch_reviewer "$role" &
-  RESULTS["$role"]=$!
+prompt_for() { # prompt_for <rol> <reintento 0|1>
+  local role="$1" retry="$2"
+  cat <<P
+Eres reviewer-${role} de una AI Factory. Revisa SOLO desde tu especialidad (${role}) y SOLO lo que ves abajo: el spec, la salida del gate y el diff real. No confies en descripciones del autor.
+Responde unicamente con texto (no uses herramientas, no escribas archivos). Formato EXACTO, sin bloques de codigo:
+Linea 1: VERDICT: PASS   (o VERDICT: CHANGES, o VERDICT: PASS (n/a) si no aplica a este cambio)
+Linea 2: SCORE: <numero entre 0 y 1>
+Despues: hallazgos concretos con archivo:linea y severidad. Si el diff borra archivos o toca rutas fuera del alcance del spec, es un hallazgo bloqueante.
+$( [ "$retry" = 1 ] && echo "ATENCION: tu respuesta anterior no cumplio el formato. Empieza EXACTAMENTE con las dos lineas VERDICT: y SCORE:." )
+
+$(cat "$CTX")
+P
+}
+
+extract_review() { # extract_review <raw> <destino>: desde la primera linea VERDICT:, sin ANSI ni vallas ```
+  sed 's/\x1b\[[0-9;]*m//g; s/\r$//' "$1" | grep -v '^```' | awk '/^VERDICT:/{p=1} p' > "$2"
+}
+
+run_role() {
+  local role="$1" review="${ROUND_DIR}/review-${role}.md" raw="${ROUND_DIR}/raw-${role}.txt" err="${ROUND_DIR}/err-${role}.txt"
+  rm -f "$review" "$raw" "$err"
+  local model attempt=0 reason="" args
+  model="$(sed -n 's/^model:[[:space:]]*//p' ".opencode/agent/reviewer-${role}.md" 2>/dev/null | head -1)"
+  args=(run --agent "reviewer-${role}"); [ -n "$model" ] && args+=(--model "$model")
+  [ "${REVIEW_PURE:-1}" = 1 ] && args+=(--pure); [ "${REVIEW_AUTO:-1}" = 1 ] && args+=(--auto)
+  while [ "$attempt" -le "$RETRIES" ]; do
+    : > "$raw"; : > "$err"
+    local retry=0; [ "$attempt" -gt 0 ] && retry=1
+    local setsid_cmd=(); command -v setsid >/dev/null 2>&1 && setsid_cmd=(setsid)
+    "${setsid_cmd[@]}" "$OC" "${args[@]}" "$(prompt_for "$role" "$retry")" >"$raw" 2>"$err" &
+    local pid=$! start now last_change size last_size=-1; start=$(date +%s); last_change=$start; reason=""
+    trap 'kill -TERM -- "-$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null; exit 143' TERM INT
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep "$POLL"; now=$(date +%s)
+      size=$(( $(stat -c %s "$raw" 2>/dev/null || echo 0) + $(stat -c %s "$err" 2>/dev/null || echo 0) ))
+      if [ "$size" -ne "$last_size" ]; then last_size=$size; last_change=$now; fi
+      if [ $((now - start)) -ge "$TIMEOUT" ]; then reason="timeout total ${TIMEOUT}s"; fi
+      if [ "$IDLE" -gt 0 ] && [ $((now - last_change)) -ge "$IDLE" ]; then reason="inactivo ${IDLE}s"; fi
+      if [ -n "$reason" ]; then kill -TERM -- "-$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null; sleep 2; kill -KILL -- "-$pid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null; break; fi
+    done
+    wait "$pid" 2>/dev/null; local rc=$?
+    [ -z "$reason" ] && [ "$rc" -ne 0 ] && reason="opencode salio con codigo ${rc}"
+    if [ -z "$reason" ]; then extract_review "$raw" "$review"; valid_review "$review" && { echo "OK   reviewer-${role}: $(head -1 "$review") | $(sed -n 2p "$review")"; return 0; }; reason="respuesta sin formato VERDICT/SCORE"; fi
+    attempt=$((attempt + 1))
+  done
+  printf 'VERDICT: CHANGES\nSCORE: 0\n\nREVIEWER_FALLO: %s (modelo %s). Falla cerrado: requiere revision humana.\n' "$reason" "${model:-?}" > "$review"
+  echo "FAIL reviewer-${role}: ${reason}"; return 3
+}
+
+echo "Round ${ROUND} | diff real: ${CTX} | paralelismo ${MAXPAR} | timeout ${TIMEOUT}s | inactividad ${IDLE}s"
+RUNNING=0; ANYFAIL=0
+rm -f "${ROUND_DIR}"/.status-*
+for role in "${ROLES[@]}"; do
+  while [ "$RUNNING" -ge "$MAXPAR" ]; do wait -n 2>/dev/null; RUNNING=$((RUNNING - 1)); done
+  ( run_role "$role"; echo $? > "${ROUND_DIR}/.status-${role}" ) &
+  PID_ROLE[$!]="$role"; RUNNING=$((RUNNING + 1))
 done
+wait
+for role in "${ROLES[@]}"; do [ "$(cat "${ROUND_DIR}/.status-${role}" 2>/dev/null || echo 9)" = 0 ] || ANYFAIL=1; done
 
-# ── 5. Esperar a que terminen los 4 ─────────────────────────────────────────
-FAILURES=0
-for role in security ux ui code; do
-  pid="${RESULTS[$role]}"
-  if ! wait "$pid" 2>/dev/null; then
-    echo "FAIL: reviewer-${role} terminó con error"
-    FAILURES=$((FAILURES + 1))
-  fi
-done
-
-# ── 6. Limpiar zombies post-ejecución ───────────────────────────────────────
-pkill -f "opencode run" 2>/dev/null || true
-
-# ── 7. Resultado ────────────────────────────────────────────────────────────
-if [ "$FAILURES" -eq 0 ]; then
-  echo "LANZAMIENTO COMPLETO: 4/4 revisores OK para job ${JOB_ID} round ${ROUND}"
-  exit 0
-else
-  echo "LANZAMIENTO PARCIAL: ${FAILURES}/4 revisores fallaron para job ${JOB_ID} round ${ROUND}"
-  exit 1
-fi
+bash "${HERE}/validate-artifacts.sh" "$JOB_ID" "$ROUND" || ANYFAIL=1
+[ "$ANYFAIL" -eq 0 ] && exit 0 || exit 3

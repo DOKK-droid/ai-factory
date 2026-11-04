@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 need() { [ -e "$1" ] && echo "OK: $1" || { echo "ERROR: falta $1" >&2; exit 1; }; }
 for f in factory-agent factory-maint .opencode/command/factory.md .opencode/plugins/factory-guard.js factory/scripts/command-guard.mjs \
          factory/config.json 01-TOOLS/checks.sh 01-TOOLS/risk.sh 02-DOCS/wiki/index.md 02-DOCS/wiki/sdd/constitution.md \
-         03-SKILLS/factory-protocol/SKILL.md; do need "$f"; done
+         03-SKILLS/factory-protocol/SKILL.md 01-TOOLS/lib.sh 01-TOOLS/new-job.sh 01-TOOLS/launch-reviewers.sh 01-TOOLS/validate-artifacts.sh factory/scripts/scope-check.mjs factory/scripts/validate-models.mjs factory/scripts/install-managed.sh factory/templates/managed-opencode.json; do need "$f"; done
 [ "$(ls .opencode/agent/*.md | wc -l)" -ge 11 ] && echo "OK: 11 agentes custom" || { echo "ERROR: faltan agentes"; exit 1; }
 node factory/scripts/apply-models.js --check >/dev/null && echo "OK: modelos de los agentes coinciden con factory/config.json"
 npm test --silent

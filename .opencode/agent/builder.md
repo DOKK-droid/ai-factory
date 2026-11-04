@@ -6,21 +6,33 @@ temperature: 0.2
 permission:
   edit:
     "*": allow
-    "opencode.json": deny
-    "factory/config.json": deny
-    ".hooks/*": deny
-    "01-TOOLS/checks.sh": deny
-    "01-TOOLS/risk.sh": deny
-    "01-TOOLS/intake.js": deny
-    ".opencode/plugins/*": deny
-    ".opencode/agent/*": deny
-    ".opencode/command/*": deny
-    "factory/scripts/command-guard.mjs": deny
-    "factory/jobs/*/decision.md": deny
-    "factory/jobs/*/human.md": deny
-    "factory/jobs/*/round-*": deny
-    "factory/jobs/*/gate.md": deny
-    "factory/jobs/*/job.json": deny
+    "*opencode.json": deny
+    "*factory/config.json": deny
+    "*.hooks/*": deny
+    "*.git/hooks/*": deny
+    "*.git/config": deny
+    "*.github/*": deny
+    "*factory/templates/*": deny
+    "*factory/scripts/*": deny
+    "*factory/logs/*": deny
+    "*01-TOOLS/checks.sh": deny
+    "*01-TOOLS/risk.sh": deny
+    "*01-TOOLS/intake.js": deny
+    "*01-TOOLS/lib.sh": deny
+    "*01-TOOLS/new-job.sh": deny
+    "*01-TOOLS/launch-reviewers.sh": deny
+    "*01-TOOLS/validate-artifacts.sh": deny
+    "*.opencode/plugins/*": deny
+    "*.opencode/agent/*": deny
+    "*.opencode/command/*": deny
+    "*factory-agent*": deny
+    "*factory-maint*": deny
+    "*AGENTS.md": deny
+    "*factory/jobs/*/decision.md": deny
+    "*factory/jobs/*/human.md": deny
+    "*factory/jobs/*/round-*": deny
+    "*factory/jobs/*/gate.md": deny
+    "*factory/jobs/*/job.json": deny
   bash:
     "*": ask
     "git add*": allow

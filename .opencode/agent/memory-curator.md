@@ -6,8 +6,8 @@ temperature: 0.2
 permission:
   edit:
     "*": deny
-    "02-DOCS/wiki/*": allow
-    "factory/jobs/*/trace.md": allow
+    "*02-DOCS/wiki/*": allow
+    "*factory/jobs/*/trace.md": allow
   bash:
     "*": deny
     "git diff*": allow

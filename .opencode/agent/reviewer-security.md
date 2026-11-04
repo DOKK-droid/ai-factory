@@ -4,17 +4,8 @@ mode: subagent
 model: opencode-go/grok-4.7
 temperature: 0.2
 permission:
-  edit:
-    "*": deny
-    "factory/jobs/*/round-*/review-security.md": allow
-  bash:
-    "*": deny
-    "git diff*": allow
-    "git log*": allow
-    "git status*": allow
-    "git show*": allow
-    "grep *": allow
-    "rg *": allow
+  edit: deny
+  bash: deny
   webfetch: deny
 ---
 

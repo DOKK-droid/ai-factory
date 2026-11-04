@@ -61,7 +61,9 @@ test('ship-guard: solo FAST_PATH + APPROVE + fast_path ON', () => {
 });
 test('spec-first-gate: exige Surface y criterios numerados', () => {
   const gate = (spec) => run('bash', [path.join(HOOKS, 'spec-first-gate.sh'), 'j1'], { env: { ...process.env, ...job(spec ? { 'spec.md': spec } : {}) } });
-  assert.equal(gate('# s\nSurface: none\n1. criterio\n').status, 0);
+  assert.equal(gate('# s\nSurface: none\n\nAlcance:\n- src/**\n\n1. criterio\n').status, 0);
+  assert.notEqual(gate('# s\nSurface: none\n1. criterio\n').status, 0);            // sin Alcance
+  assert.notEqual(gate('# s\nSurface: none\nAlcance:\n- **\n1. criterio\n').status, 0); // alcance total
   assert.notEqual(gate('# s\n1. criterio\n').status, 0);
   assert.notEqual(gate('# s\nSurface: none\nsin criterios\n').status, 0);
   assert.notEqual(gate(null).status, 0);
@@ -78,4 +80,15 @@ test('worktree-reaper: no borra worktrees con cambios sin commitear', () => {
   assert.match(git(d, 'worktree', 'list'), /job-77/);
   run('bash', [path.join(HOOKS, 'worktree-reaper.sh'), 'job-77'], { cwd: d, env: { ...process.env, FACTORY_FORCE: '1' } });
   assert.doesNotMatch(git(d, 'worktree', 'list'), /job-77/);
+});
+
+test('pre-commit: ramas factory/* no se commitean en el checkout principal, si en su worktree', () => {
+  const d = makeRepo(); git(d, 'checkout', '-q', '-b', 'factory/j1'); withHooks(d);
+  write(path.join(d, 'a.txt'), 'a'); git(d, 'add', '-A');
+  assert.notEqual(tryCommit(d).status, 0);
+  assert.equal(tryCommit(d, { FACTORY_HUMAN: '1' }).status, 0);
+  git(d, 'checkout', '-q', 'main');
+  const wt = path.join(tmp('af-wt-'), 'j2'); git(d, 'worktree', 'add', '-q', '-b', 'factory/j2', wt, 'main');
+  write(path.join(wt, 'b.txt'), 'b'); git(wt, 'add', '-A');
+  assert.equal(run('git', ['commit', '-qm', 'x'], { cwd: wt }).status, 0);
 });

@@ -1,0 +1,70 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { REPO, tmp, write, run } from './helpers.mjs';
+import { parseModelsOutput, agentModels } from '../factory/scripts/validate-models.mjs';
+
+const VM = path.join(REPO, 'factory/scripts/validate-models.mjs');
+const VA = path.join(REPO, '01-TOOLS/validate-artifacts.sh');
+
+test('parseModelsOutput: ignora cabeceras, colores y lineas que no son provider/modelo', () => {
+  const ids = parseModelsOutput('\x1b[32mModelos disponibles\x1b[0m\nopencode/glm-5.3-flash-free\n  opencode-go/gpt-5.6-luna  \n\nTotal: 2\n');
+  assert.deepEqual([...ids].sort(), ['opencode-go/gpt-5.6-luna', 'opencode/glm-5.3-flash-free']);
+});
+function modelsProject(models, agents) {
+  const d = tmp('af-vm-');
+  for (const [n, m] of Object.entries(agents)) write(path.join(d, `.opencode/agent/${n}.md`), `---\nmodel: ${m}\n---\nx\n`);
+  write(path.join(d, 'models.txt'), models.join('\n') + '\n');
+  return d;
+}
+const vm = (d, args = [], env = {}) => run('node', [VM, ...args], { cwd: d, env: { ...process.env, FACTORY_MODELS_FILE: path.join(d, 'models.txt'), ...env } });
+test('validate-models: todos existen => 0; uno inexistente => 1 con el ID', () => {
+  assert.equal(vm(modelsProject(['a/x', 'b/y'], { one: 'a/x', two: 'b/y' })).status, 0);
+  const r = vm(modelsProject(['a/x'], { one: 'a/x', two: 'opencode/deepseek-v4-flash-free' }));
+  assert.equal(r.status, 1); assert.match(r.stderr, /NO EXISTE: agente two usa "opencode\/deepseek-v4-flash-free"/);
+});
+test('validate-models: --agents limita; agente sin model: es error; lista no disponible => 3 (nunca se asume)', () => {
+  const d = modelsProject(['a/x'], { one: 'a/x', two: 'zz/zz' });
+  assert.equal(vm(d, ['--agents', 'one']).status, 0);
+  write(path.join(d, '.opencode/agent/three.md'), '---\ndescription: sin modelo\n---\nx\n');
+  assert.equal(vm(d, ['--agents', 'three']).status, 1);
+  const r = run('node', [VM], { cwd: d, env: { ...process.env, FACTORY_MODELS_FILE: '', OPENCODE_BIN: '/no/existe/opencode' } });
+  assert.equal(r.status, 3);
+});
+test('los agentes reales: cada uno declara un modelo', () => {
+  const m = agentModels(path.join(REPO, '.opencode/agent'));
+  assert.ok(Object.keys(m).length >= 11); for (const [n, id] of Object.entries(m)) assert.match(id || '', /^[\w.-]+\/[\w.:+-]+$/, n);
+});
+test('reviewers sin herramientas de escritura: edit y bash denegados por completo (el modelo ni las ve)', () => {
+  for (const r of ['security', 'ux', 'ui', 'code']) {
+    const fm = fs.readFileSync(path.join(REPO, `.opencode/agent/reviewer-${r}.md`), 'utf8').match(/^---\n([\s\S]*?)\n---/)[1];
+    assert.match(fm, /^permission:\n {2}edit: deny\n {2}bash: deny\n {2}webfetch: deny$/m, r);
+  }
+});
+
+function job(files) {
+  const d = tmp('af-va-');
+  for (const [f, t] of Object.entries(files)) write(path.join(d, 'jobs/j1', f), t);
+  return { d, env: { ...process.env, FACTORY_JOBS_DIR: path.join(d, 'jobs') } };
+}
+const GOOD = 'VERDICT: PASS\nSCORE: 0.9\n\nok\n';
+const all = (round, t = GOOD) => Object.fromEntries(['security', 'ux', 'ui', 'code'].map((r) => [`round-${round}/review-${r}.md`, t]));
+test('validate-artifacts: formato correcto => 0 y usa el ULTIMO round', () => {
+  const { d, env } = job({ ...all(1, 'LGTM\n'), ...all(2) });
+  assert.equal(run('bash', [VA, 'j1'], { cwd: d, env }).status, 0);
+  assert.notEqual(run('bash', [VA, 'j1', '1'], { cwd: d, env }).status, 0);
+});
+test('validate-artifacts: SCORE fuera de 0..1, VERDICT raro o falta de review => 1 y sin "OK" engañoso', () => {
+  for (const bad of ['VERDICT: PASS\nSCORE: 7\n', 'VERDICT: LGTM\nSCORE: 0.5\n', 'VERDICT: PASS\n']) {
+    const { d, env } = job({ ...all(1), 'round-1/review-ui.md': bad });
+    const r = run('bash', [VA, 'j1'], { cwd: d, env });
+    assert.equal(r.status, 1); assert.doesNotMatch(r.stdout, /OK: .*review-ui\.md/);
+  }
+  const { d, env } = job({ 'round-1/review-code.md': GOOD });
+  assert.match(run('bash', [VA, 'j1'], { cwd: d, env }).stdout, /FAIL: falta .*review-security/);
+});
+test('validate-artifacts: decision.md valida APPROVE/CHANGES/ESCALATE', () => {
+  const ok = job({ ...all(1), 'decision.md': 'APPROVE\n' }); assert.equal(run('bash', [VA, 'j1'], { cwd: ok.d, env: ok.env }).status, 0);
+  const bad = job({ ...all(1), 'decision.md': 'Aprobado\n' }); assert.equal(run('bash', [VA, 'j1'], { cwd: bad.d, env: bad.env }).status, 1);
+});

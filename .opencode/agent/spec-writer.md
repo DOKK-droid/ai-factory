@@ -6,8 +6,8 @@ temperature: 0.3
 permission:
   edit:
     "*": deny
-    "factory/jobs/*/spec.md": allow
-    "factory/jobs/*/tasks.md": allow
+    "*factory/jobs/*/spec.md": allow
+    "*factory/jobs/*/tasks.md": allow
   bash:
     "*": deny
     "git diff*": allow

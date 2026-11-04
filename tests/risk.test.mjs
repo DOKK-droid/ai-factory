@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO, write, run, makeRepo, commitAll } from './helpers.mjs';
+import { REPO, write, run, git, makeRepo, commitAll } from './helpers.mjs';
 
 const RISK = path.join(REPO, '01-TOOLS/risk.sh');
 
 /** Crea repo + job. `mutate` ajusta el repo/job antes de ejecutar risk.sh. */
-function scenario({ fastPath = true, mutate = () => {}, changes = 'good' } = {}) {
-  const repo = makeRepo();
+function scenario({ fastPath = true, mutate = () => {}, changes = 'good', extra = {} } = {}) {
+  const repo = makeRepo({ '.gitignore': 'jobs/\ncfg.json\n', ...extra });
   if (changes === 'good') {
     write(path.join(repo, 'src/feature.js'), 'export const f = () => 42;\n');
     write(path.join(repo, 'tests/feature.test.js'), "test('f', () => { expect(f()).toBe(42); });\n");
@@ -18,7 +18,7 @@ function scenario({ fastPath = true, mutate = () => {}, changes = 'good' } = {})
   for (const r of ['security', 'ux', 'ui', 'code']) write(path.join(job, `round-1/review-${r}.md`), 'VERDICT: PASS\nSCORE: 0.95\n');
   write(path.join(job, 'decision.md'), 'APPROVE\n');
   write(path.join(job, 'gate.md'), 'GATE: PASS\n');
-  write(path.join(job, 'spec.md'), '# Spec\nSurface: none\n1. criterio\n');
+  write(path.join(job, 'spec.md'), '# Spec\nSurface: none\n\nAlcance:\n- src/**\n- tests/**\n\n1. criterio\n');
   const cfg = path.join(repo, 'cfg.json');
   write(cfg, JSON.stringify({ max_diff_lines: 400, base_branch: 'main', fast_path: { enabled: fastPath, min_score: 0.85 } }));
   mutate({ repo, job, cfg });
@@ -83,3 +83,27 @@ test('base inexistente => NEEDS_HUMAN (falla cerrado)', () =>
   expectHuman(scenario({ mutate: ({ cfg }) => write(cfg, JSON.stringify({ base_branch: 'nope', fast_path: { enabled: true, min_score: 0.85 } })) }), 'diff_no_disponible'));
 test('config ilegible => fast_path desactivado => NEEDS_HUMAN', () =>
   expectHuman(scenario({ mutate: ({ cfg }) => write(cfg, '{no json') })));
+
+test('spec sin seccion Alcance => NEEDS_HUMAN (falla cerrado)', () =>
+  expectHuman(scenario({ mutate: ({ job }) => write(path.join(job, 'spec.md'), '# Spec\nSurface: none\n1. criterio\n') }), 'sin_alcance_definido'));
+test('archivo cambiado fuera del alcance => NEEDS_HUMAN', () =>
+  expectHuman(scenario({ mutate: ({ repo }) => { write(path.join(repo, 'README.md'), 'x\n'); commitAll(repo, 'readme'); } }), 'diff_fuera_de_alcance'));
+test('BORRADO fuera del alcance (el commit contaminado del job e2e) => NEEDS_HUMAN', () =>
+  expectHuman(scenario({ extra: { '.agents/skills/x/SKILL.md': '# s\n' }, mutate: ({ repo }) => { git(repo, 'rm', '-q', '.agents/skills/x/SKILL.md'); commitAll(repo, 'del'); } }), 'borrado_fuera_de_alcance'));
+test('gate con tests cambiados sin ejecutar (UNVERIFIED_TESTS) => NEEDS_HUMAN', () =>
+  expectHuman(scenario({ mutate: ({ job }) => write(path.join(job, 'gate.md'), 'GATE: PASS\nUNVERIFIED_TESTS: tests/j.test.js\n') }), 'tests_cambiados_sin_ejecutar'));
+test('desde una worktree anidada encuentra los jobs del checkout principal (sin FACTORY_JOBS_DIR)', () => {
+  const repo = makeRepo({ '.gitignore': 'factory/jobs/\nfactory/worktrees/\ncfg.json\n' });
+  const wt = path.join(repo, 'factory/worktrees/w1');
+  git(repo, 'worktree', 'add', '-q', '-b', 'factory/w1', wt, 'main');
+  write(path.join(wt, 'src/f.js'), 'export const f = 1;\n'); write(path.join(wt, 'tests/f.test.js'), "test('f', () => { expect(f).toBe(1); });\n"); commitAll(wt, 'job');
+  const job = path.join(repo, 'factory/jobs/j1');
+  for (const r of ['security', 'ux', 'ui', 'code']) write(path.join(job, `round-1/review-${r}.md`), 'VERDICT: PASS\nSCORE: 0.95\n');
+  write(path.join(job, 'decision.md'), 'APPROVE\n'); write(path.join(job, 'gate.md'), 'GATE: PASS\n');
+  write(path.join(job, 'spec.md'), '# S\nSurface: none\n\nAlcance:\n- src/**\n- tests/**\n');
+  write(path.join(wt, 'cfg.json'), JSON.stringify({ max_diff_lines: 400, base_branch: 'main', fast_path: { enabled: true, min_score: 0.85 } }));
+  const env = { ...process.env, FACTORY_CONFIG: path.join(wt, 'cfg.json') }; delete env.FACTORY_JOBS_DIR;
+  const r = run('bash', [RISK, 'j1'], { cwd: wt, env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(job, 'human.md'), 'utf8').split('\n')[0], 'FAST_PATH');
+});

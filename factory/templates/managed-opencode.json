@@ -1,0 +1,48 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "git push": "deny",
+      "git push *": "deny",
+      "git merge *": "deny",
+      "git reset --hard*": "deny",
+      "git clean *": "deny",
+      "git branch -D*": "deny",
+      "git branch -d *main*": "deny",
+      "git update-ref*": "deny",
+      "git filter-branch*": "deny",
+      "gh pr merge*": "deny",
+      "gh pr ready*": "deny",
+      "gh pr review *": "deny",
+      "gh api *": "deny",
+      "gh auth token*": "deny",
+      "gh auth refresh*": "deny",
+      "gh secret *": "deny",
+      "gh variable *": "deny",
+      "gh ssh-key *": "deny",
+      "gh repo delete*": "deny",
+      "rm -rf *": "deny",
+      "rm -fr *": "deny",
+      "printenv*": "deny",
+      "git push -u origin factory/*": "allow",
+      "git push *--force*": "deny",
+      "git push * -f*": "deny",
+      "git push *--delete*": "deny",
+      "git push *--mirror*": "deny",
+      "git push *--all*": "deny",
+      "git push *--tags*": "deny",
+      "git push * +*": "deny",
+      "git push * :*": "deny",
+      "git push *:*": "deny",
+      "git push * main*": "deny",
+      "git push * master*": "deny",
+      "git push * HEAD*": "deny"
+    },
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}

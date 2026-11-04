@@ -12,7 +12,12 @@
     "factory:intake": "node 01-TOOLS/intake.js",
     "factory:apply-models": "node factory/scripts/apply-models.js",
     "factory:risk": "bash 01-TOOLS/risk.sh",
-    "hooks:install": "bash .hooks/install-git-hooks.sh"
+    "hooks:install": "bash .hooks/install-git-hooks.sh",
+    "factory:new-job": "bash 01-TOOLS/new-job.sh",
+    "factory:reviewers": "bash 01-TOOLS/launch-reviewers.sh",
+    "factory:validate-artifacts": "bash 01-TOOLS/validate-artifacts.sh",
+    "factory:validate-models": "node factory/scripts/validate-models.mjs --config",
+    "factory:install-managed": "bash factory/scripts/install-managed.sh"
   },
   "engines": {
     "node": ">=20.0.0"
