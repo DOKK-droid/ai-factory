@@ -107,3 +107,14 @@ test('desde una worktree anidada encuentra los jobs del checkout principal (sin 
   assert.equal(r.status, 0, r.stderr);
   assert.equal(fs.readFileSync(path.join(job, 'human.md'), 'utf8').split('\n')[0], 'FAST_PATH');
 });
+
+// ---- parche 8: lineas extra de gate.md y obsolescencia atada al commit ----
+const headOf = (repo) => git(repo, 'rev-parse', 'HEAD').trim();
+test('gate.md con COMMIT y GATE_FAIL_STREAK del HEAD actual (formato nuevo) no rompe nada: sigue FAST_PATH', () =>
+  assert.equal(scenario({ mutate: ({ repo, job }) => { write(path.join(job, 'gate.md'), `GATE: PASS\nCOMMIT: ${headOf(repo)}\nGATE_FAIL_STREAK: 0\n\n=== log ===\n`); write(path.join(job, 'round-1/.commit'), headOf(repo) + '\n'); } }).first, 'FAST_PATH'));
+test('gate.md de otro commit => NEEDS_HUMAN gate_obsoleto; reviews de otro commit => reviews_obsoletas', () => {
+  expectHuman(scenario({ mutate: ({ job }) => write(path.join(job, 'gate.md'), 'GATE: PASS\nCOMMIT: ' + 'b'.repeat(40) + '\n') }), 'gate_obsoleto');
+  expectHuman(scenario({ mutate: ({ job }) => write(path.join(job, 'round-1/.commit'), 'c'.repeat(40) + '\n') }), 'reviews_obsoletas');
+});
+test('UNVERIFIED_TESTS se sigue leyendo aunque haya lineas COMMIT antes', () =>
+  expectHuman(scenario({ mutate: ({ repo, job }) => write(path.join(job, 'gate.md'), `GATE: PASS\nCOMMIT: ${headOf(repo)}\nUNVERIFIED_TESTS: tests/j.test.js\n`) }), 'tests_cambiados_sin_ejecutar'));

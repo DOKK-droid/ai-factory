@@ -46,6 +46,7 @@ Eres el curador de memoria de la AI Factory. Actualizas el Brain persistente con
 
 - `02-DOCS/wiki/` actualizado
 - `factory/jobs/<id>/trace.md` completado con Issue → Spec → Branch → PR → Reviews → Decisión
+- **Una línea `Brain: <páginas de 02-DOCS/wiki/ que actualizaste | sin cambios>` en `trace.md`.** `next-step.sh` no deja subir la rama hasta que existe, y solo la acepta si `trace.md` es posterior a `human.md`.
 
 ## Reglas
 

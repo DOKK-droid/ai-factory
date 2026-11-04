@@ -22,6 +22,8 @@ permission:
     "*01-TOOLS/new-job.sh": deny
     "*01-TOOLS/launch-reviewers.sh": deny
     "*01-TOOLS/validate-artifacts.sh": deny
+    "*01-TOOLS/next-step.sh": deny
+    "*factory/project.json": deny
     "*.opencode/plugins/*": deny
     "*.opencode/agent/*": deny
     "*.opencode/command/*": deny
@@ -33,6 +35,9 @@ permission:
     "*factory/jobs/*/round-*": deny
     "*factory/jobs/*/gate.md": deny
     "*factory/jobs/*/job.json": deny
+    "*factory/jobs/*/spec.ok": deny
+    "*factory/jobs/*/review.ok": deny
+    "*factory/jobs/*/pr.url": deny
   bash:
     "*": ask
     "git add*": allow

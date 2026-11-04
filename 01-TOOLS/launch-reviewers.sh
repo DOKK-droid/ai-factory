@@ -12,7 +12,7 @@
 #  * No se lanzan reviewers si el gate no paso (ahorra tokens).
 #
 # Variables: REVIEW_TIMEOUT_SECS (36000) REVIEW_IDLE_SECS (1800; 0 = sin vigilante) REVIEW_POLL_SECS (5)
-#            REVIEW_MAX_PARALLEL (2) REVIEW_MAX_DIFF_BYTES (120000) REVIEW_RETRIES (1)
+#            REVIEW_MAX_PARALLEL (2; 1 si FACTORY_LOW_RESOURCES=1) REVIEW_MAX_DIFF_BYTES (120000) REVIEW_RETRIES (1)
 #            REVIEW_PURE (1) REVIEW_AUTO (1) OPENCODE_BIN (opencode) FACTORY_SKIP_MODEL_CHECK (0)
 # Salida: 0 = 4 reviews validos y del modelo; 1 = no se pudo empezar; 3 = algun reviewer fallo (hay review fail-closed)
 set -uo pipefail
@@ -25,15 +25,23 @@ JOB_ID="${1:?Uso: launch-reviewers.sh <job-id> [round]}"
 JOB_DIR="$(factory_jobs_dir)/${JOB_ID}"
 ROLES=(security ux ui code)
 TIMEOUT="${REVIEW_TIMEOUT_SECS:-36000}"; IDLE="${REVIEW_IDLE_SECS:-1800}"; POLL="${REVIEW_POLL_SECS:-5}"
-MAXPAR="${REVIEW_MAX_PARALLEL:-2}"; MAXDIFF="${REVIEW_MAX_DIFF_BYTES:-120000}"; RETRIES="${REVIEW_RETRIES:-1}"
+LOWRES=2; [ "${FACTORY_LOW_RESOURCES:-0}" = "1" ] && LOWRES=1   # maquina con poca RAM: un reviewer a la vez
+MAXPAR="${REVIEW_MAX_PARALLEL:-$LOWRES}"; MAXDIFF="${REVIEW_MAX_DIFF_BYTES:-120000}"; RETRIES="${REVIEW_RETRIES:-1}"
 OC="${OPENCODE_BIN:-opencode}"
 
 [ -d "$JOB_DIR" ] || { echo "ERROR: no existe ${JOB_DIR}" >&2; exit 1; }
 [ -f "${JOB_DIR}/spec.md" ] || { echo "ERROR: falta spec.md" >&2; exit 1; }
 [ "$(head -1 "${JOB_DIR}/gate.md" 2>/dev/null | tr -d '\r')" = "GATE: PASS" ] || { echo "ERROR: el gate no paso (gate.md != GATE: PASS); no se lanzan reviewers" >&2; exit 1; }
+# El gate debe corresponder al HEAD actual: reviews sobre codigo distinto al verificado no valen.
+HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+GATE_COMMIT="$(sed -n 's/^COMMIT: \([0-9a-f]\{7,40\}\)\r\{0,1\}$/\1/p' "${JOB_DIR}/gate.md" | head -1)"
+if [ -n "$GATE_COMMIT" ] && [ -n "$HEAD_SHA" ] && [ "$GATE_COMMIT" != "$HEAD_SHA" ]; then
+  echo "ERROR: gate.md es de otro commit (${GATE_COMMIT:0:7}) y HEAD es ${HEAD_SHA:0:7}; vuelve a ejecutar checks.sh" >&2; exit 1
+fi
 if [ -n "${2:-}" ]; then ROUND="$2"
 else last="$(ls -d "${JOB_DIR}"/round-* 2>/dev/null | sort -V | tail -1)"; ROUND=$(( $(basename "${last:-round-0}" | sed 's/round-//') + 1 )); fi
 ROUND_DIR="${JOB_DIR}/round-${ROUND}"; mkdir -p "$ROUND_DIR"
+rm -f "${ROUND_DIR}/.commit"   # una ejecucion interrumpida no puede parecer completa
 
 if [ "${FACTORY_SKIP_MODEL_CHECK:-0}" != "1" ]; then
   node "$MODELS_JS" --agents reviewer-security,reviewer-ux,reviewer-ui,reviewer-code || { echo "ERROR: modelos de reviewers no validos; abortado" >&2; exit 1; }
@@ -121,5 +129,8 @@ done
 wait
 for role in "${ROLES[@]}"; do [ "$(cat "${ROUND_DIR}/.status-${role}" 2>/dev/null || echo 9)" = 0 ] || ANYFAIL=1; done
 
-bash "${HERE}/validate-artifacts.sh" "$JOB_ID" "$ROUND" || ANYFAIL=1
+# `.commit` = HEAD revisado. Solo se escribe al terminar los 4 roles (con review valido o fail-closed).
+[ -z "$HEAD_SHA" ] || printf '%s\n' "$HEAD_SHA" > "${ROUND_DIR}/.commit"
+
+VALIDATE_REVIEWS_ONLY=1 bash "${HERE}/validate-artifacts.sh" "$JOB_ID" "$ROUND" || ANYFAIL=1
 [ "$ANYFAIL" -eq 0 ] && exit 0 || exit 3

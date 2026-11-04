@@ -64,6 +64,7 @@ FAST_PATH | NEEDS_HUMAN
 
 ## Reglas
 
+- La línea 1 de `human.md` la fija `risk.sh` (determinista). Tú **solo añades** la sección `## Resumen para el humano` (con evidencias y checklist) al final; no cambias ni una letra de la línea 1. `next-step.sh` detecta un `FAST_PATH` que `risk.sh` no habría puesto y detiene el job.
 - Si es `NEEDS_HUMAN`: preparar resumen claro con evidencias y checklist
 - Si es `FAST_PATH`: solo si `fast_path.enabled=true` en config.json, CI verde y branch protection lo permite
 - Por defecto `fast_path.enabled=false`

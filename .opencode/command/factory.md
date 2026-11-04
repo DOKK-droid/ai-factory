@@ -1,53 +1,54 @@
 ---
-description: Ejecuta el pipeline completo de la AI Software Factory: input -> spec -> builder -> gate -> 4 reviewers -> approver -> human-gate -> output
+description: Arranca el bucle de la AI Software Factory: next-step.sh decide el paso, el orchestrator lo ejecuta, hasta DONE o STOP
+agent: orchestrator
 ---
 
 # Comando /factory
 
-Ejecuta la AI Software Factory completa siguiendo la arquitectura del video de Eric Risco.
+Arranca (o reanuda) el pipeline de la AI Software Factory. El orden de los pasos **no vive en un prompt: lo decide el script `01-TOOLS/next-step.sh`** (máquina de estados determinista, de solo lectura). El orchestrator solo hace el bucle.
 
 ## Uso
 
 ```
-/factory "<tarea o descripción>"
-/factory next          # toma el siguiente item de factory/backlog.md
-/factory status        # estado de jobs activos
-/factory approve <id>  # aprueba un job manualmente (human override)
+/factory <id-de-job>             # reanuda un job existente (cualquier estado)
+/factory "<descripcion nueva>"   # tarea nueva: genera el id y empieza por el estado 0
+/factory status                  # next-step.sh sobre cada job de factory/jobs/ (sin ejecutar nada)
 ```
 
-## Fases del pipeline
+Argumentos recibidos: $ARGUMENTS
 
-1. **Intake** — normaliza Sentry / GitHub Issue / tarea manual a `factory/jobs/<id>/input.md`
-2. **Spec Writer** — genera `spec.md` + `tasks.md` (SDD), consulta `02-DOCS/`
-3. **Builder** — `bash 01-TOOLS/new-job.sh <job-id>` crea la **worktree aislada** `factory/worktrees/<job-id>` (rama `factory/<job-id>`, siempre desde la rama base, nunca desde tu directorio de trabajo). Antes de construir: `bash .hooks/spec-first-gate.sh <job-id>` (el spec debe declarar `Alcance:`). TDD por tarea; se commitea **solo dentro de la worktree** (el hook lo exige)
-4. **Gate determinista** — `bash 01-TOOLS/checks.sh <job-id>` desde la worktree. Comprueba: alcance (los cambios reales caben en `Alcance:`), sintaxis de cada archivo cambiado, lint/typecheck/suite y **ejecuta explícitamente los tests que el job cambió**. Escribe `gate.md` (`GATE: PASS|FAIL`, y `UNVERIFIED_TESTS:` si algún test no pudo ejecutarse). Si falla, vuelve al builder SIN lanzar reviewers
-5. **4 Revisores** — `bash 01-TOOLS/launch-reviewers.sh <job-id>` desde la worktree. Reciben spec + `gate.md` + el **diff real** (nunca la narración del builder). No tienen herramientas de escritura ni bash: el script guarda `round-N/review-<x>.md`, valida el formato, reintenta una vez y, si sigue mal, escribe `VERDICT: CHANGES / SCORE: 0` (falla cerrado). Antes valida los IDs de modelo contra `opencode models`
-6. **Aprobador** — `decision.md` (APPROVE / CHANGES / ESCALATE); bucle al builder si CHANGES
-7. **Decisor Humano** — `bash 01-TOOLS/risk.sh <job-id>` (determinista, usa `git diff` real; línea 1 de `human.md` = FAST_PATH | NEEDS_HUMAN). El agente human-gate solo redacta el resumen
-8. **Output** — `git push -u origin factory/<job-id>` y luego `gh pr create --draft`. Un agente solo puede subir ramas `factory/*` (nunca main) y jamás hace merge: el plugin factory-guard, los permisos y los git hooks lo impiden; el merge lo hace un humano
-9. **Memory Curator** — actualiza `02-DOCS/wiki/` y `trace.md`
+## Lo que debes hacer
 
-## Archivos por job (`factory/jobs/<id>/`)
+1. Si el argumento es un id de job que existe en `factory/jobs/`, úsalo. Si es una descripción nueva, genera el id con `bash 01-TOOLS/next-step.sh --new-id` y recuerda la descripción: se la pasarás a `@intake`. **No saltes a escribir código**: el primer paso siempre lo dice `next-step.sh` (estado 0: crear la worktree).
+2. Bucle: `bash 01-TOOLS/next-step.sh <id>` → ejecutar exactamente lo que diga (`RUN:`, `DELEGATE:`) → volver a llamar. Para en `DONE` o en `STOP:` (informa el código, los `WHY:` y los `CMD:`; los `CMD:` los ejecuta el humano).
+3. `status`: ejecuta `bash 01-TOOLS/next-step.sh <id>` para cada carpeta de `factory/jobs/` y resume solo la primera línea de cada una. No ejecutes ninguna acción.
 
-| Archivo | Propósito |
-|---------|-----------|
-| `job.json` | Estado del job (solo orchestrator) |
-| `input.md` | Entrada normalizada |
-| `spec.md` | Spec SDD: `Surface: page \| none`, criterios numerados y sección `Alcance:` (rutas que el job puede tocar) |
-| `tasks.md` | Desglose de tareas |
-| `build.md` | TDD rojo/verde por tarea |
-| `gate.md` | Resultado del gate determinista |
-| `round-N/review-<x>.md` | Informe de cada revisor (VERDICT + SCORE) |
-| `decision.md` | APPROVE / CHANGES / ESCALATE |
-| `human.md` | FAST_PATH / NEEDS_HUMAN |
-| `trace.md` | Issue → Spec → Branch → PR → Reviews → Decisión |
+## Estados (los resuelve el script; esta tabla es solo referencia)
+
+| # | Condición | Acción |
+|---|---|---|
+| 0 | no existe el job/worktree | `RUN: new-job.sh` |
+| 1 | falta `input.md` | `DELEGATE @intake` |
+| 2 | spec o tasks ausentes/inválidos | `DELEGATE @spec-writer` |
+| 3 | spec sin `spec.ok` (lo crea el humano) | `STOP: HUMAN_CONFIRM_SPEC` |
+| 4 | worktree sin commits | `DELEGATE @builder` |
+| 5 | gate ausente u obsoleto (otro commit) | `RUN: checks.sh` |
+| 6 | `GATE: FAIL` | `DELEGATE @builder` o `STOP: MAX_ROUNDS` |
+| 7 | reviews ausentes/inválidas/obsoletas | `RUN: launch-reviewers.sh` |
+| 8 | falta `decision.md` (o es anterior a los reviews) | `DELEGATE @approver` |
+| 9 | `CHANGES` / `ESCALATE` | `DELEGATE @builder` · `STOP: MAX_ROUNDS` · `STOP: ESCALATED` |
+| 10 | falta `human.md` | `RUN: risk.sh` y, si `NEEDS_HUMAN`, `DELEGATE @human-gate` |
+| 11 | falta `trace.md` con `Brain:` | `DELEGATE @memory-curator` (antes del push) |
+| 12 | rama sin subir | `RUN: git push -u origin factory/<id>` |
+| 13 | sin PR | `RUN: gh pr create --draft …` o `STOP: HUMAN_CREATE_PR` |
+| 14 | todo cumplido | `DONE` |
 
 ## Reglas
 
-- Los 4 revisores se lanzan desde el script (paralelismo limitado, `REVIEW_MAX_PARALLEL`), con límite total y por inactividad
-- Si el agente choca con un bloqueo del guard: **se detiene** y pide el cambio al humano; tras 3 bloqueos la sesión entra en modo parada (`factory/logs/BLOCKED.md`)
-- Nada de lo que está sin commitear en el checkout principal entra en un job
-- Cualquier valor ambiguo → CHANGES / ESCALATE / NEEDS_HUMAN (lado seguro)
-- Si `Surface: none`, reviewer-ux y reviewer-ui devuelven `PASS (n/a)` pero siempre se lanzan
-- Los agentes nunca hacen push ni merge; solo abren PR en borrador. `fast_path` está desactivado por defecto
-- Cada job deja traza completa y auditable
+- Política por proyecto en `factory/project.json` (`require_spec_ok`, `max_rounds`, `human_review_surfaces`, páginas del Brain por agente). Solo la edita el humano.
+- El Brain aconseja (las líneas `READ:`), `next-step.sh` decide y los permisos/guard hacen cumplir.
+- Si el guard bloquea una acción: **se detiene** y pide el cambio al humano; tras 3 bloqueos graves la sesión entra en modo parada (`touch factory/logs/RESET` la reanuda).
+- Los agentes nunca hacen push a main ni merge; solo abren PR en borrador. `fast_path` está desactivado por defecto.
+- Nada de lo que está sin commitear en el checkout principal entra en un job.
+- Cualquier valor ambiguo → CHANGES / ESCALATE / NEEDS_HUMAN / STOP (lado seguro).
+- Máquina con poca RAM: `FACTORY_LOW_RESOURCES=1` lanza los reviewers de uno en uno (ver `docs/PARCHE-8.md`).
