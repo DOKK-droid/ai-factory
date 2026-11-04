@@ -37,3 +37,27 @@ factory_merge_base() {
   done
   return 1
 }
+
+# Paginas del Brain que SOLO escribe el memory-curator (y que viajan en el PR del job). Lista duplicada en
+# factory/scripts/scope-check.mjs (CURATOR_PATHS): un test comprueba que coinciden.
+FACTORY_CURATOR_PATHS=(02-DOCS/wiki/jobs 02-DOCS/wiki/index.md 02-DOCS/wiki/sdd/decisions.md)
+
+# factory_curator_pathspec: argumentos de git para EXCLUIR las paginas del curator de un diff o un log.
+factory_curator_excludes() {
+  local p; for p in "${FACTORY_CURATOR_PATHS[@]}"; do printf '%s\n' ":(exclude)${p}"; done
+}
+
+# factory_commit_fresh <sha> [head] [dir]: 0 si <sha> sigue vigente respecto a <head> (por defecto HEAD):
+# es el mismo commit, o es un ancestro y todo lo posterior solo toca paginas del curator (documentacion, no codigo).
+# Asi el commit del Brain que cierra el job no invalida el gate ni los reviews, pero cualquier cambio de codigo si.
+factory_commit_fresh() {
+  local sha="$1" head="${2:-HEAD}" dir="${3:-.}" h s other
+  [ -n "$sha" ] || return 1
+  s="$(git -C "$dir" rev-parse -q --verify "${sha}^{commit}" 2>/dev/null)" || return 1
+  h="$(git -C "$dir" rev-parse -q --verify "${head}^{commit}" 2>/dev/null)" || return 1
+  [ "$s" = "$h" ] && return 0
+  git -C "$dir" merge-base --is-ancestor "$s" "$h" 2>/dev/null || return 1
+  mapfile -t ex < <(factory_curator_excludes)
+  other="$(git -C "$dir" diff --name-only "$s" "$h" -- . "${ex[@]}" 2>/dev/null)" || return 1
+  [ -z "$other" ]
+}

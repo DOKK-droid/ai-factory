@@ -6,9 +6,12 @@
 |-------|-------|------|
 | constitution | `02-DOCS/wiki/sdd/constitution.md` | Principios no negociables de la AI Factory |
 | arquitectura | `02-DOCS/wiki/sdd/constitution.md` | Stack canon, calidad, convenciones, branching |
-| ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001, ADR-002, ADR-003, ADR-004) |
+| ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001 a ADR-009; los nuevos nacen `Propuesto`) |
+| metodología | `02-DOCS/wiki/sdd/methodology.md` | Actores, fases, requisitos funcionales de la fábrica, buenas prácticas y definición de hecho |
+| plantilla de spec | `02-DOCS/wiki/sdd/spec-template.md` | Estructura del spec (perfil `full`): actores, RF-n, diseño, ADR, trazabilidad |
+| plantilla de job | `02-DOCS/wiki/sdd/job-page-template.md` | Estructura de la página que documenta cada job |
 | glosario | `02-DOCS/wiki/sdd/glossary.md` | Términos del proyecto |
-| lecciones por job | `02-DOCS/wiki/sdd/lessons/` | Lecciones aprendidas por job cerrado |
+| documentación por job | `02-DOCS/wiki/jobs/<id>.md` | Qué se construyó, diseño, pruebas (con el commit del gate) y lecciones de cada job; viaja en el PR del job |
 | errores recurrentes | `02-DOCS/wiki/sdd/errors.md` | Errores recurrentes y cómo se resolvieron |
 | incidentes por zona | `02-DOCS/wiki/sdd/incidents.md` | Incidentes registrados por zona de código |
 | installation plan | `02-DOCS/wiki/harness/installation-plan.md` | Plan de instalación RSC |

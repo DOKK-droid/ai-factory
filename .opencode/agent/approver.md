@@ -62,6 +62,8 @@ APPROVE | CHANGES | ESCALATE
 
 ## Reglas
 
+- Si el spec declara requisitos funcionales (`RF-n`), comprueba que los reviews no reportan un RF sin test; un RF sin cobertura es motivo de `CHANGES`.
+
 - Si CHANGES, se devuelve al Builder con la lista consolidada (bucle, máx. `max_rounds`)
 - Después de `max_rounds` con CHANGES, pasar a ESCALATE
 - Solo lectura del PR y reviews

@@ -249,3 +249,47 @@ Justificacion:
 - En la factory, con 4 revisores en paralelo y diffs complejos, el tiempo puede extenderse aun mas.
 - 10 horas da margen suficiente para cualquier demora sin bloquear el pipeline indefinidamente.
 Para ajustar: export REVIEW_TIMEOUT_SECS=72000 (20 horas) si se requiere mas margen.
+
+## ADR-008: Plano de control determinista (`next-step.sh`) separado del Brain
+
+Fecha: 2026-11-04
+Estado: Propuesto
+
+### Contexto
+Un modelo gratuito no sigue de forma fiable un pipeline de 11 pasos escrito en prosa: en una corrida real lanzó los reviewers por Task, escribió `gate.md` a mano y se saltó pasos. El orden de los pasos es una decisión de control, no de contenido.
+
+### Decisión
+El flujo lo decide `01-TOOLS/next-step.sh`, una máquina de estados de solo lectura y sin LLM que lee los artefactos del job y devuelve `RUN` / `DELEGATE` / `STOP` / `DONE`. El orchestrator solo ejecuta un bucle. El Brain aconseja (líneas `READ:`), el plano de control decide y los permisos (frontmatter, config managed, guard) hacen cumplir. La política de cada proyecto vive en `factory/project.json`, que solo edita el humano. Gate y reviews quedan atados al commit (`COMMIT:` / `round-N/.commit`).
+
+### Alternativas consideradas
+- Mejorar el prompt del orchestrator: rechazado, depende de que el modelo obedezca.
+- Que el Brain dicte el flujo: rechazado, un Brain desactualizado o mal leído dejaría pasar un paso sin que nada lo frene.
+
+### Consecuencias
+- El flujo es testeable sin LLM (`tests/next-step.test.mjs`).
+- Cualquier valor ambiguo termina en `STOP`: el sistema falla cerrado.
+- Cambiar el flujo exige cambiar código y tests, no un prompt.
+
+## ADR-009: El Brain viaja en el PR del job; ADR propuestos; perfil de spec `full`
+
+Fecha: 2026-11-04
+Estado: Propuesto
+
+### Contexto
+En una corrida real el `@memory-curator` escribió en el checkout principal: el Brain quedó sin commitear, fuera del PR y sin revisión, y recogió como lección una afirmación falsa ("24 tests preexistentes fallan") que no estaba en la evidencia. Además no había criterio para registrar ADR.
+
+### Decisión
+1. El curator escribe en la worktree del job solo `02-DOCS/wiki/jobs/<id>.md`, `index.md` y `sdd/decisions.md`; `commit-brain.sh` los commitea en la rama del job y viajan en el PR. Los commits que solo tocan esas páginas no invalidan el gate ni los reviews (`factory_commit_fresh`).
+2. El spec declara `ADR: none | <título>`. Si hay título, el curator añade un ADR con `Estado: Propuesto`; el humano lo pasa a `Aprobado` al fusionar. `next-step.sh` no deja subir la rama sin él.
+3. Perfil de spec `full` (`factory/project.json`): Actores, Requisitos funcionales `RF-n`, Diseño y trazabilidad RF → criterio → tarea. La página del job debe citar el commit del gate: las pruebas se afirman con la evidencia.
+4. Los ids de job pueden ser descriptivos (`next-step.sh --new-id "frase corta"`): `<palabras>-<aammdd>-<4 hex>`.
+
+### Alternativas consideradas
+- Brain en una rama aparte: rechazado por ahora, añade push y PR automáticos; se puede reconsiderar.
+- Dejar el Brain sin versionar: rechazado, nadie lo revisa.
+
+### Consecuencias
+- El humano revisa código y documentación en el mismo PR.
+- Las afirmaciones sobre pruebas son verificables contra `gate.md`.
+- Más estructura exigida al spec-writer: se activa por proyecto con `spec_profile`.
+

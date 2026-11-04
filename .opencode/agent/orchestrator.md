@@ -45,8 +45,8 @@ Eres el orchestrator de la AI Software Factory. **No decides el flujo: lo decide
 
 ## El bucle
 
-1. Si el humano te dio una tarea nueva y no hay `<id>`: `bash 01-TOOLS/next-step.sh --new-id` imprime un id. Úsalo como `<id>`.
-2. `bash 01-TOOLS/next-step.sh <id>` (siempre desde el checkout principal). Lee la **primera línea** de la salida:
+1. Si el humano te dio una tarea nueva y no hay `<id>`: resume la tarea en **3 a 6 palabras clave** y ejecuta `bash 01-TOOLS/next-step.sh --new-id 'palabras clave'` (comillas simples, sin comillas ni `$` dentro de la frase). Imprime un id descriptivo como `funcion-clamp-numeros-261104-8acd`; úsalo como `<id>`.
+2. `bash 01-TOOLS/next-step.sh <id>` (siempre desde el checkout principal). Lee la **primera línea** de la salida (las líneas `STATE:` y `PHASE:` te dicen en qué fase del flujo estás; repítelas al humano en tus avisos):
    - `RUN: <comando>` → ejecútalo **tal cual**, sin cambiarlo. Si sale con error, para: informa el comando, el error literal y espera (no lo rodees).
    - `DELEGATE: @<agente> | <qué debe producir> | <archivo>` → lanza ese agente por Task con esa instrucción. Si la salida trae una línea `READ:`, dile al agente que **lea esas páginas del Brain (`02-DOCS/wiki/…`) antes de actuar**. Cuando termine, vuelve al paso 2. Pásale al agente el texto original de la tarea si es `@intake`.
    - `STOP: <CÓDIGO>` → no hagas nada más. Cuenta al humano el código, las líneas `WHY:` y, si hay, los `CMD:` (son comandos que ejecuta **el humano**, no tú). Espera.
@@ -67,7 +67,7 @@ Códigos de `STOP` frecuentes: `HUMAN_CONFIRM_SPEC` (el humano confirma el spec 
 | `round-N/review-*.md` | **script** | `cd factory/worktrees/<id> && bash 01-TOOLS/launch-reviewers.sh <id> <N>` — NUNCA por Task: los reviewers no pueden escribir, el script guarda sus respuestas y el diff real |
 | `decision.md` | `@approver` | Task |
 | `human.md` | script + `@human-gate` | `risk.sh` fija la línea 1; `@human-gate` solo añade el resumen |
-| `trace.md` + Brain | `@memory-curator` | Task, antes del push |
+| `trace.md` + Brain del job (`02-DOCS/wiki/jobs/<id>.md`, ADR) | `@memory-curator` | Task, escribe EN LA WORKTREE; luego `RUN: … commit-brain.sh <id>` lo commitea para que viaje en el PR |
 | rama + PR borrador | tú, si `next-step.sh` lo pide | `git push -u origin factory/<id>` y `gh pr create --draft …` |
 
 Tú solo escribes `trace.md` (y solo si te lo piden). **Nunca** escribes `gate.md`, `job.json`, `round-N/review-*.md`, `decision.md`, `human.md`, `spec.ok`, `review.ok` ni `pr.url`: son evidencia o decisiones del humano. Escribir una a mano es fabricar un resultado, aunque "solo sea para continuar".

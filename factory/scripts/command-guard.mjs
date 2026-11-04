@@ -16,7 +16,7 @@ export const PROTECTED_PATHS = [
   '.hooks/', '.git/hooks/', '.git/config', '.github/', 'factory/templates/',
   // scripts del gate y del pipeline (si el agente los pudiera editar, podria volver verde cualquier cosa)
   '01-TOOLS/checks.sh', '01-TOOLS/risk.sh', '01-TOOLS/intake.js', '01-TOOLS/lib.sh', '01-TOOLS/new-job.sh',
-  '01-TOOLS/launch-reviewers.sh', '01-TOOLS/validate-artifacts.sh', '01-TOOLS/next-step.sh',
+  '01-TOOLS/launch-reviewers.sh', '01-TOOLS/validate-artifacts.sh', '01-TOOLS/next-step.sh', '01-TOOLS/commit-brain.sh',
   // politica del proyecto que lee next-step.sh (el Brain aconseja; esto decide y solo lo cambia el humano)
   'factory/project.json',
   // lanzadores y reglas de conducta
