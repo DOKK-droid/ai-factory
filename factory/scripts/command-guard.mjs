@@ -16,7 +16,9 @@ export const PROTECTED_PATHS = [
   '.hooks/', '.git/hooks/', '.git/config', '.github/', 'factory/templates/',
   // scripts del gate y del pipeline (si el agente los pudiera editar, podria volver verde cualquier cosa)
   '01-TOOLS/checks.sh', '01-TOOLS/risk.sh', '01-TOOLS/intake.js', '01-TOOLS/lib.sh', '01-TOOLS/new-job.sh',
-  '01-TOOLS/launch-reviewers.sh', '01-TOOLS/validate-artifacts.sh',
+  '01-TOOLS/launch-reviewers.sh', '01-TOOLS/validate-artifacts.sh', '01-TOOLS/next-step.sh',
+  // politica del proyecto que lee next-step.sh (el Brain aconseja; esto decide y solo lo cambia el humano)
+  'factory/project.json',
   // lanzadores y reglas de conducta
   'factory-agent', 'factory-maint', 'AGENTS.md',
   // auditoria del guard: el agente puede leerla, no editarla ni resetear el modo parada
@@ -24,16 +26,17 @@ export const PROTECTED_PATHS = [
 ];
 
 /** Palabras que un agente no tiene motivo para escribir: abren puertas traseras al guard o a los hooks. */
-const BACKDOOR_RE = /factory-maint|FACTORY_GUARD_ALLOW_PROTECTED_EDIT|FACTORY_HUMAN\b/;
+const BACKDOOR_RE = /factory-maint|FACTORY_GUARD_ALLOW_PROTECTED_EDIT|FACTORY_HUMAN\b|FACTORY_REQUIRE_SPEC_OK/;
 const INTERPRETERS = new Set(['python', 'python3', 'node', 'nodejs', 'deno', 'bun', 'perl', 'ruby', 'php', 'lua', 'pwsh', 'powershell']);
 const ENV_MENTION_RE = /(^|[^\w])\.env(?!\w)(?![.\w]*(?:example|sample|template))/;
 
 /** Ruta de destino protegida? Los directorios (terminan en "/") por prefijo; los archivos por nombre exacto. */
 /** Evidencia del pipeline: solo la escriben los scripts (checks.sh, launch-reviewers.sh), nunca un agente a mano. */
-const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|round-[^/]+\/review-[^/]+\.md)$/;
+// Incluye las marcas del humano (spec.ok, review.ok, pr.url) y el commit revisado de cada ronda (.commit).
+const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|spec\.ok|review\.ok|pr\.url|round-[^/]+\/(review-[^/]+\.md|\.commit))$/;
 export function isProtectedPath(target) {
   const t = String(target).replace(/\\/g, '/').replace(/^\.\//, '');
-  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md y round-N/review-*.md (los escriben checks.sh y launch-reviewers.sh)';
+  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md, round-N/review-*.md, round-N/.commit (los escriben checks.sh y launch-reviewers.sh) o las marcas spec.ok / review.ok / pr.url (las crea el humano)';
   return PROTECTED_PATHS.find((p) => (p.endsWith('/') ? t.startsWith(p) || t.includes('/' + p) : t === p || t.endsWith('/' + p)));
 }
 /** El texto (codigo de un intérprete) menciona rutas protegidas o archivos .env? */
@@ -423,7 +426,7 @@ export function classifyBash(command, opts = {}, depth = 0) {
   }
   if (depth > MAX_DEPTH) return block('Comando demasiado anidado. Bloqueado por seguridad.');
   if (!opts.allowProtected && BACKDOOR_RE.test(command)) {
-    return grave('Mencionar factory-maint, FACTORY_GUARD_ALLOW_PROTECTED_EDIT o FACTORY_HUMAN esta prohibido para agentes: desactivan las protecciones.');
+    return grave('Mencionar factory-maint, FACTORY_GUARD_ALLOW_PROTECTED_EDIT, FACTORY_HUMAN o FACTORY_REQUIRE_SPEC_OK esta prohibido para agentes: desactivan las protecciones.');
   }
   const { text, bodies, interpBodies } = splitHeredocs(command);
   if (!opts.allowProtected) {

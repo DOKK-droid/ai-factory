@@ -68,3 +68,17 @@ test('validate-artifacts: decision.md valida APPROVE/CHANGES/ESCALATE', () => {
   const ok = job({ ...all(1), 'decision.md': 'APPROVE\n' }); assert.equal(run('bash', [VA, 'j1'], { cwd: ok.d, env: ok.env }).status, 0);
   const bad = job({ ...all(1), 'decision.md': 'Aprobado\n' }); assert.equal(run('bash', [VA, 'j1'], { cwd: bad.d, env: bad.env }).status, 1);
 });
+
+// ---- parche 8: validate-artifacts con .commit, lineas extra y VALIDATE_REVIEWS_ONLY ----
+test('validate-artifacts: ignora .commit y las lineas extra del gate; VALIDATE_REVIEWS_ONLY omite decision.md', () => {
+  const d = tmp('af-va8-'); const job = path.join(d, 'jobs/j');
+  for (const r of ['security', 'ux', 'ui', 'code']) write(path.join(job, `round-1/review-${r}.md`), 'VERDICT: PASS\nSCORE: 0.9\n\nok\n');
+  write(path.join(job, 'round-1/.commit'), 'a'.repeat(40) + '\n'); write(path.join(job, 'gate.md'), 'GATE: PASS\nCOMMIT: ' + 'a'.repeat(40) + '\nGATE_FAIL_STREAK: 0\n');
+  const env = { ...process.env, FACTORY_JOBS_DIR: path.join(d, 'jobs') };
+  assert.equal(run('bash', [VA, 'j', '1'], { cwd: d, env }).status, 0);
+  write(path.join(job, 'decision.md'), 'quizas\n');
+  assert.equal(run('bash', [VA, 'j', '1'], { cwd: d, env }).status, 1);                                     // decision invalida
+  assert.equal(run('bash', [VA, 'j', '1'], { cwd: d, env: { ...env, VALIDATE_REVIEWS_ONLY: '1' } }).status, 0); // solo reviews
+  write(path.join(job, 'round-1/review-ux.md'), 'Todo bien\n');
+  assert.equal(run('bash', [VA, 'j', '1'], { cwd: d, env: { ...env, VALIDATE_REVIEWS_ONLY: '1' } }).status, 1); // un review malo sigue fallando
+});

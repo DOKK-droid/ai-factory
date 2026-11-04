@@ -66,6 +66,15 @@ DECISION="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/decision.md" 2>/dev/null | 
 [ "$DECISION" = "APPROVE" ] || add "approver_no_aprueba" "decision.md: '${DECISION:-ausente}' (se exige APPROVE)"
 GATE="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/gate.md" 2>/dev/null | trim || true)"
 [ "$GATE" = "GATE: PASS" ] || add "gate_no_pasa" "gate.md: '${GATE:-ausente}' (se exige GATE: PASS)"
+# Obsolescencia (solo si el artefacto declara su commit; los gate/reviews antiguos sin COMMIT no se penalizan aqui,
+# pero next-step.sh los trata como obsoletos).
+HEAD_NOW="$(git rev-parse "${HEAD_REF}^{commit}" 2>/dev/null || true)"
+GATE_COMMIT="$(sed -n 's/^COMMIT:[[:space:]]*\([0-9a-f]\{7,40\}\)\r\{0,1\}$/\1/p' "${JOB_DIR}/gate.md" 2>/dev/null | head -1)"
+[ -z "$GATE_COMMIT" ] || [ -z "$HEAD_NOW" ] || [ "$GATE_COMMIT" = "$HEAD_NOW" ] || add "gate_obsoleto" "gate.md es de ${GATE_COMMIT:0:7} y HEAD es ${HEAD_NOW:0:7}"
+if [ -n "$LAST_ROUND" ] && [ -f "${LAST_ROUND}/.commit" ]; then
+  ROUND_COMMIT="$(head -1 "${LAST_ROUND}/.commit" | trim)"
+  [ -z "$HEAD_NOW" ] || [ "$ROUND_COMMIT" = "$HEAD_NOW" ] || add "reviews_obsoletas" "Los reviews son de ${ROUND_COMMIT:0:7} y HEAD es ${HEAD_NOW:0:7}"
+fi
 UNV="$(sed -n 's/^UNVERIFIED_TESTS:[[:space:]]*//p' "${JOB_DIR}/gate.md" 2>/dev/null | head -1 | trim)"
 [ -z "$UNV" ] || add "tests_cambiados_sin_ejecutar" "El gate no pudo ejecutar estos tests cambiados: ${UNV}"
 

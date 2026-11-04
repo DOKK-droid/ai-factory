@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # checks.sh — Gate determinista del job. Sale con codigo != 0 si algo falla.
 # Uso: bash 01-TOOLS/checks.sh [job-id]     (desde la worktree del job)
-# Con job-id escribe <jobs>/<id>/gate.md: linea 1 `GATE: PASS|FAIL`; si hay tests cambiados que no se
-# pudieron ejecutar anade `UNVERIFIED_TESTS: ...` (risk.sh lo trata como riesgo, nunca como verde).
+# Con job-id escribe <jobs>/<id>/gate.md: linea 1 `GATE: PASS|FAIL`, luego `COMMIT: <sha>` (el HEAD comprobado) y
+# `GATE_FAIL_STREAK: n`; si hay tests cambiados que no se pudieron ejecutar anade `UNVERIFIED_TESTS: ...`
+# (risk.sh lo trata como riesgo, nunca como verde).
 #
 # Que comprueba:
 #   1. ALCANCE   los cambios reales (git) caben en `Alcance:` del spec (solo con job-id)
@@ -149,8 +150,15 @@ say "=== Gate: ${RESULT} ==="
 
 if [ -n "$JOB_ID" ]; then
   mkdir -p "${JOBS_DIR}/${JOB_ID}"
+  # `COMMIT:` ata el resultado al HEAD que se comprobo: next-step.sh lo trata como obsoleto si HEAD cambia.
+  # `GATE_FAIL_STREAK:` cuenta gates FAIL seguidos (se lee del gate.md anterior) para acotar el bucle con el builder.
+  PREV_STREAK="$(sed -n 's/^GATE_FAIL_STREAK: \([0-9][0-9]*\)\r\{0,1\}$/\1/p' "${JOBS_DIR}/${JOB_ID}/gate.md" 2>/dev/null | head -1)"
+  STREAK=0; [ "$RESULT" = "FAIL" ] && STREAK=$(( ${PREV_STREAK:-0} + 1 ))
+  HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
   {
     echo "GATE: ${RESULT}"
+    [ -z "$HEAD_SHA" ] || echo "COMMIT: ${HEAD_SHA}"
+    echo "GATE_FAIL_STREAK: ${STREAK}"
     if [ "${#UNVERIFIED[@]}" -gt 0 ]; then echo "UNVERIFIED_TESTS: $(IFS=,; echo "${UNVERIFIED[*]}")"; fi
     echo; cat "$LOG"
   } > "${JOBS_DIR}/${JOB_ID}/gate.md"

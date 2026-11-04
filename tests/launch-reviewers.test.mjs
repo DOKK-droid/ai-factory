@@ -26,7 +26,7 @@ case "$mode" in
   nofmt) echo "Todo me parece bien, no veo problemas." ;;
   nofmt_then_ok) if [ "$n" -eq 1 ]; then echo "texto libre"; else ok; fi ;;
   fail) echo "boom" >&2; exit 1 ;;
-  hang) sleep 600 ;;
+  hang) sleep 30 ;;
 esac
 echo "end $agent $(date +%s.%N)" >> "$LOG/events"
 `;
@@ -127,4 +127,47 @@ test('diff grande se trunca con aviso explicito', () => {
 test('el round avanza solo (round-1, round-2) y conserva el contexto de cada uno', () => {
   const s = setup(); launch(s); launch(s);
   assert.ok(fs.existsSync(path.join(s.job, 'round-2/review-code.md'))); assert.ok(fs.existsSync(path.join(s.job, 'round-1/context.md')));
+});
+
+// ---- parche 8: .commit, gate obsoleto, FACTORY_LOW_RESOURCES ----
+const maxConcurrent = (s) => {
+  let cur = 0, max = 0;
+  for (const l of fs.readFileSync(path.join(s.logs, 'events'), 'utf8').trim().split('\n').sort((a, b) => a.split(' ')[2] - b.split(' ')[2])) { cur += l.startsWith('start') ? 1 : -1; max = Math.max(max, cur); }
+  return max;
+};
+test('escribe round-N/.commit con el HEAD revisado, sin tocar las lineas 1 y 2 de cada review', () => {
+  const s = setup(); const r = launch(s); assert.equal(r.status, 0, r.stdout);
+  const head = run('git', ['rev-parse', 'HEAD'], { cwd: s.repo }).stdout.trim();
+  assert.equal(fs.readFileSync(path.join(s.job, 'round-1/.commit'), 'utf8').trim(), head);
+  assert.match(review(s, 'code'), /^VERDICT: PASS\nSCORE: 0\.9\n/);
+});
+test('.commit tambien se escribe si un reviewer fallo (hay review fail-closed)', () => {
+  const s = setup(); write(path.join(s.job, 'round-1/.commit'), 'viejo\n');
+  const r = launch(s, { STUB_MODE_REVIEWER_CODE: 'fail', REVIEW_RETRIES: '0' }, ['j1', '1']); assert.equal(r.status, 3);
+  assert.match(fs.readFileSync(path.join(s.job, 'round-1/.commit'), 'utf8'), /^[0-9a-f]{40}\n?$/);
+});
+test('una ronda que no termina (script matado a medias) NO deja .commit: el .commit viejo se borra al empezar', async () => {
+  const s = setup(); write(path.join(s.job, 'round-1/.commit'), 'viejo\n');
+  const child = spawn('bash', [LAUNCH, 'j1', '1'], { cwd: s.repo, detached: true, stdio: 'ignore', env: { ...process.env, OPENCODE_BIN: s.bin, STUB_LOG: s.logs, STUB_MODELS: path.join(s.logs, 'models.txt'),
+    FACTORY_BASE: 'main', FACTORY_JOBS_DIR: path.join(s.repo, 'jobs'), REVIEW_POLL_SECS: '1', STUB_MODE: 'hang' } });
+  for (let i = 0; i < 100 && !fs.existsSync(path.join(s.logs, 'events')); i++) await new Promise((r) => setTimeout(r, 100));
+  try { process.kill(-child.pid, 'SIGKILL'); } catch {}
+  assert.ok(fs.existsSync(path.join(s.logs, 'events')), 'los reviewers no llegaron a empezar');
+  assert.equal(fs.existsSync(path.join(s.job, 'round-1/.commit')), false);
+});
+test('gate.md de otro commit => no se lanza nada; sin linea COMMIT (gate antiguo) o con el commit correcto => se lanza', () => {
+  const stale = setup({ gate: 'GATE: PASS\nCOMMIT: ' + 'a'.repeat(40) + '\n' }); const r = launch(stale);
+  assert.equal(r.status, 1); assert.match(r.stderr, /gate\.md es de otro commit/); assert.equal(fs.existsSync(path.join(stale.logs, 'events')), false);
+  assert.equal(launch(setup({ gate: 'GATE: PASS\n' })).status, 0);
+  const s = setup(); const head = run('git', ['rev-parse', 'HEAD'], { cwd: s.repo }).stdout.trim();
+  write(path.join(s.job, 'gate.md'), `GATE: PASS\nCOMMIT: ${head}\nGATE_FAIL_STREAK: 0\n`); assert.equal(launch(s).status, 0);
+});
+test('FACTORY_LOW_RESOURCES=1 => un reviewer a la vez por defecto; REVIEW_MAX_PARALLEL explicito manda; sin el, 2', () => {
+  const env = { REVIEW_MAX_PARALLEL: '' , STUB_MODE: 'slow' };
+  const low = setup(); const e1 = { ...env, FACTORY_LOW_RESOURCES: '1' }; delete e1.REVIEW_MAX_PARALLEL;
+  const r1 = run('bash', [LAUNCH, 'j1'], { cwd: low.repo, env: { ...process.env, OPENCODE_BIN: low.bin, STUB_LOG: low.logs, STUB_MODELS: path.join(low.logs, 'models.txt'), FACTORY_BASE: 'main', FACTORY_JOBS_DIR: path.join(low.repo, 'jobs'), REVIEW_POLL_SECS: '1', STUB_MODE: 'slow', FACTORY_LOW_RESOURCES: '1', REVIEW_MAX_PARALLEL: undefined } });
+  assert.equal(r1.status, 0, r1.stdout); assert.equal(maxConcurrent(low), 1);
+  const dflt = setup(); const r2 = run('bash', [LAUNCH, 'j1'], { cwd: dflt.repo, env: { ...process.env, OPENCODE_BIN: dflt.bin, STUB_LOG: dflt.logs, STUB_MODELS: path.join(dflt.logs, 'models.txt'), FACTORY_BASE: 'main', FACTORY_JOBS_DIR: path.join(dflt.repo, 'jobs'), REVIEW_POLL_SECS: '1', STUB_MODE: 'slow', REVIEW_MAX_PARALLEL: undefined, FACTORY_LOW_RESOURCES: undefined } });
+  assert.equal(r2.status, 0); assert.equal(maxConcurrent(dflt), 2);
+  const exp = setup(); assert.equal(launch(exp, { STUB_MODE: 'slow', FACTORY_LOW_RESOURCES: '1', REVIEW_MAX_PARALLEL: '3' }).status, 0); assert.ok(maxConcurrent(exp) >= 2);
 });

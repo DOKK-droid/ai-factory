@@ -69,3 +69,25 @@ test('dentro de una worktree anidada: gate.md se escribe en la carpeta de jobs d
   const g = gate({ cwdWorktree: true, mutate: (d) => { write(path.join(d, 'src/w.js'), 'export const w = 1;\n'); commitAll(d, 'j'); } });
   assert.equal(g.status, 0, g.stdout); assert.equal(first(g), 'GATE: PASS');
 });
+
+// ---- parche 8: gate.md atado al commit y racha de fallos ----
+test('gate.md: linea 1 GATE:, luego COMMIT: <sha de HEAD> y GATE_FAIL_STREAK: 0', () => {
+  const g = gate({ mutate: (d) => { write(path.join(d, 'src/a.js'), 'export const b = 2;\n'); commitAll(d, 'job'); } });
+  const head = git(g.repo, 'rev-parse', 'HEAD').trim();
+  assert.equal(g.status, 0, g.stdout);
+  assert.deepEqual(g.gateMd.split('\n').slice(0, 3), ['GATE: PASS', `COMMIT: ${head}`, 'GATE_FAIL_STREAK: 0']);
+});
+test('gate.md con tests sin ejecutar: UNVERIFIED_TESTS sigue en el archivo y la linea 1 no se mueve', () => {
+  const g = gate({ extra: { 'package.json': '{"name":"t","scripts":{"test":"exit 0"}}\n' }, mutate: (d) => { write(path.join(d, 'tests/x.test.ts'), 'export {};\n'); commitAll(d, 'job'); } });
+  assert.equal(first(g), 'GATE: PASS'); assert.match(g.gateMd, /^COMMIT: [0-9a-f]{40}$/m); assert.match(g.gateMd, /^UNVERIFIED_TESTS: /m);
+});
+test('GATE_FAIL_STREAK cuenta FAIL seguidos y un PASS lo reinicia; el COMMIT sigue a HEAD', () => {
+  const repo = makeRepo({ 'package.json': '{"name":"t","scripts":{"test":"exit 0"}}\n', '.gitignore': 'jobs/\n' });
+  write(path.join(repo, 'jobs/j/spec.md'), SPEC);
+  const go = (cmd) => { run('bash', [CHECKS, 'j'], { cwd: repo, env: { ...process.env, FACTORY_BASE: 'main', FACTORY_JOBS_DIR: path.join(repo, 'jobs'), FACTORY_TEST_CMD: cmd } });
+    return fs.readFileSync(path.join(repo, 'jobs/j/gate.md'), 'utf8').split('\n').slice(0, 3); };
+  assert.equal(go('exit 1')[2], 'GATE_FAIL_STREAK: 1'); assert.equal(go('exit 1')[2], 'GATE_FAIL_STREAK: 2');
+  write(path.join(repo, 'src/n.js'), 'export const n = 1;\n'); commitAll(repo, 'n');
+  const l = go('exit 1'); assert.equal(l[2], 'GATE_FAIL_STREAK: 3'); assert.equal(l[1], `COMMIT: ${git(repo, 'rev-parse', 'HEAD').trim()}`);
+  const ok = go('true'); assert.deepEqual([ok[0], ok[2]], ['GATE: PASS', 'GATE_FAIL_STREAK: 0']); assert.equal(go('exit 1')[2], 'GATE_FAIL_STREAK: 1');
+});
