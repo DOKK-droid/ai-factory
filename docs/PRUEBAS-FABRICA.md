@@ -13,6 +13,8 @@ opencode debug config | node factory/scripts/probe-permissions.mjs   # 0 FAIL, e
 
 - La sonda puede imprimir `AVISO valor enmascarado ... gh secret *: *** -> deny`. Es normal: OpenCode oculta ese valor y la sonda lo resuelve desde `opencode.json` y la plantilla managed.
 - Si sale exit 3 con un mensaje sobre `permission.bash`/`permission.read`, la salida no se pudo leer. Prueba `opencode debug config > /tmp/cfg.txt` y `--file /tmp/cfg.txt`.
+- La sonda lee el valor enmascarado desde `opencode.json` y la plantilla, no desde lo que OpenCode aplica. Si se edita `/etc/opencode/opencode.json` a mano, solo `install-managed.sh --check` lo detecta: mantén ese orden en el paso 0.
+- El número de tests de `node --test` cuenta subtests y no es comparable entre máquinas ni versiones de Node (681 aquí, 334 en otra). Lo que importa es `fail 0`.
 - Reinicia OpenCode (carga el plugin nuevo).
 
 ## 1. Guard sin falsos positivos
