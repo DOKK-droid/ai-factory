@@ -65,7 +65,7 @@ Recorre a mano los primeros estados creando los artefactos **de un job de prueba
 ## 4. Job mínimo end-to-end
 
 Con `FACTORY_LOW_RESOURCES=1` (reviewers de uno en uno), tarea trivial `Surface: none` (una función con su test), `fast_path` apagado.
-Lanza `/factory "<tarea>"` y **no le recuerdes nada**: el orchestrator solo hace el bucle de `next-step.sh`. Cuando salga `STOP: HUMAN_CONFIRM_SPEC`, lee el spec y ejecuta tú el `touch`; vuelve a lanzar `/factory <id>`.
+Lanza `/factory "<tarea>"` (el id sale descriptivo, p. ej. `funcion-clamp-numeros-261104-8acd`) y **no le recuerdes nada**: el orchestrator solo hace el bucle de `next-step.sh`. Cuando salga `STOP: HUMAN_CONFIRM_SPEC`, lee el spec y ejecuta tú el `touch`; vuelve a lanzar `/factory <id>`.
 En `factory/jobs/<id>/` deben existir:
 
 - `input.md`
@@ -75,12 +75,17 @@ En `factory/jobs/<id>/` deben existir:
 - `round-1/review-{security,ux,ui,code}.md`: línea 1 `VERDICT:` válido, línea 2 `SCORE:`; y `round-1/.commit` igual al HEAD
 - `decision.md`
 - `human.md` (`NEEDS_HUMAN` por defecto, con `## Resumen para el humano`)
-- `trace.md` con una línea `Brain: ...`
+- `trace.md` con una línea `Brain: ...` que lista páginas que **existen en la worktree**
+- Con `spec_profile: full`: `spec.md` con `Actores`, `Requisitos funcionales` (RF-n), `Diseño` y `ADR:`; y en la worktree `02-DOCS/wiki/jobs/<id>.md` (6 secciones, cita el commit de `gate.md`) en un commit `docs(brain)` que **aparece en el PR**
 
 ```bash
 bash 01-TOOLS/validate-artifacts.sh <id> 1; echo $?    # 0
 bash 01-TOOLS/next-step.sh <id>                        # DONE (o STOP: HUMAN_CREATE_PR si no hay gh)
+git -C factory/worktrees/<id> diff --name-only origin/main...HEAD   # código + 02-DOCS/wiki/jobs/<id>.md (+ index.md, + decisions.md si hubo ADR)
+git status --short 02-DOCS                             # el checkout principal NO debe tener Brain sin commitear
 ```
+
+**Lee tú la página del job** y contrasta cada afirmación sobre pruebas con `gate.md` y los reviews. El script comprueba que cita el commit del gate, no que sea verdad lo demás.
 
 ## 5. Delegación
 

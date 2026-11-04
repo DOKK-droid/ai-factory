@@ -70,10 +70,10 @@ GATE="$(grep -m1 -v '^[[:space:]]*$' "${JOB_DIR}/gate.md" 2>/dev/null | trim || 
 # pero next-step.sh los trata como obsoletos).
 HEAD_NOW="$(git rev-parse "${HEAD_REF}^{commit}" 2>/dev/null || true)"
 GATE_COMMIT="$(sed -n 's/^COMMIT:[[:space:]]*\([0-9a-f]\{7,40\}\)\r\{0,1\}$/\1/p' "${JOB_DIR}/gate.md" 2>/dev/null | head -1)"
-[ -z "$GATE_COMMIT" ] || [ -z "$HEAD_NOW" ] || [ "$GATE_COMMIT" = "$HEAD_NOW" ] || add "gate_obsoleto" "gate.md es de ${GATE_COMMIT:0:7} y HEAD es ${HEAD_NOW:0:7}"
+[ -z "$GATE_COMMIT" ] || [ -z "$HEAD_NOW" ] || factory_commit_fresh "$GATE_COMMIT" "$HEAD_REF" || add "gate_obsoleto" "gate.md es de ${GATE_COMMIT:0:7} y HEAD es ${HEAD_NOW:0:7}"
 if [ -n "$LAST_ROUND" ] && [ -f "${LAST_ROUND}/.commit" ]; then
   ROUND_COMMIT="$(head -1 "${LAST_ROUND}/.commit" | trim)"
-  [ -z "$HEAD_NOW" ] || [ "$ROUND_COMMIT" = "$HEAD_NOW" ] || add "reviews_obsoletas" "Los reviews son de ${ROUND_COMMIT:0:7} y HEAD es ${HEAD_NOW:0:7}"
+  [ -z "$HEAD_NOW" ] || factory_commit_fresh "$ROUND_COMMIT" "$HEAD_REF" || add "reviews_obsoletas" "Los reviews son de ${ROUND_COMMIT:0:7} y HEAD es ${HEAD_NOW:0:7}"
 fi
 UNV="$(sed -n 's/^UNVERIFIED_TESTS:[[:space:]]*//p' "${JOB_DIR}/gate.md" 2>/dev/null | head -1 | trim)"
 [ -z "$UNV" ] || add "tests_cambiados_sin_ejecutar" "El gate no pudo ejecutar estos tests cambiados: ${UNV}"
@@ -86,7 +86,8 @@ done
 if [ -z "$BASE_OK" ] || ! git rev-parse --verify -q "${HEAD_REF}^{commit}" >/dev/null 2>&1; then
   add "diff_no_disponible" "No pude calcular el diff (base='${BASE_REF}', head='${HEAD_REF}')"
 else
-  NUMSTAT="$(git diff --numstat "${BASE_OK}...${HEAD_REF}" 2>/dev/null || true)"
+  mapfile -t CUR_EX < <(factory_curator_excludes)   # la documentacion del curator no cuenta como diff de codigo
+  NUMSTAT="$(git diff --numstat "${BASE_OK}...${HEAD_REF}" -- . "${CUR_EX[@]}" 2>/dev/null || true)"
   FILES="$(printf '%s\n' "$NUMSTAT" | awk 'NF>=3{print $3}')"
   DIFF_LINES="$(printf '%s\n' "$NUMSTAT" | awk 'NF>=3{ if($1!="-") a+=$1; if($2!="-") d+=$2 } END{print a+d+0}')"
   [ -z "$FILES" ] && add "diff_vacio" "El diff contra ${BASE_OK} esta vacio"

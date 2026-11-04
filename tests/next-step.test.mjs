@@ -55,7 +55,7 @@ for (const [name, mutate] of [
 }
 test('3: spec valido sin spec.ok => STOP HUMAN_CONFIRM_SPEC con resumen y CMD touch', () => {
   const f = fx().upTo('spec'); const r = f.ns(); expectStop(r, 'HUMAN_CONFIRM_SPEC'); assert.equal(r.state, '3');
-  assert.deepEqual(r.cmd, ['touch factory/jobs/job-1/spec.ok']); assert.match(r.why.join('\n'), /Surface: none \| criterios: 2 \| alcance: src\/\*\*/);
+  assert.deepEqual(r.cmd, ['touch factory/jobs/job-1/spec.ok']); assert.match(r.why.join('\n'), /Surface: none \| criterios: 2/); assert.match(r.why.join('\n'), /Alcance: src\/\*\*/);
 });
 test('3: spec.ok mas antiguo que spec.md (el spec cambio) => vuelve a pedir confirmacion', () => {
   const f = fx().upTo('confirmed'); expectDelegate(f.ns(), 'builder', 4);

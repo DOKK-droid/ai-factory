@@ -36,40 +36,18 @@ Eres el Spec Writer de la AI Factory. Sigues la metodología SDD (Spec-Driven De
 
 ## Reglas obligatorias
 
-- **ANTES de escribir nada, consultar el Brain (`02-DOCS/`)** para evitar duplicados, arquitecturas inventadas e incoherencia temporal
-- El Spec debe incluir: objetivo de negocio, criterios de aceptación numerados, restricciones de arquitectura existentes, tests esperados, límites y riesgos
-- Escribir solo dentro del job (`factory/jobs/<id>/`)
-- No inventar arquitecturas; usar las registradas en el Brain
-- Línea 2 de `spec.md`: `Surface: page | none`
+- **ANTES de escribir nada, lee el Brain**: las páginas de la línea `READ:` que te dio el orchestrator (`02-DOCS/wiki/index.md`, `sdd/methodology.md`, `sdd/spec-template.md`, `sdd/decisions.md`). Evita duplicados, arquitecturas inventadas e incoherencia temporal.
+- Sigue la plantilla `02-DOCS/wiki/sdd/spec-template.md`. `next-step.sh` valida su estructura y te devuelve el motivo exacto si falta algo.
+- **Análisis**: nombra los **actores** (humanos, sistemas, componentes) y escribe **requisitos funcionales** numerados `RF-1`, `RF-2`... (capacidades verificables, en lenguaje de negocio).
+- **Diseño**: componentes, archivos e interfaces que se tocan, decisiones y alternativas descartadas. Usa solo arquitecturas registradas en el Brain.
+- **Criterios de aceptación** numerados, cada uno citando el requisito que verifica: `1. [RF-1] ...`. Todo RF debe tener al menos un criterio.
+- `tasks.md`: una tarea por línea citando el RF que cubre (`- [ ] T1 (RF-1): ...`); primero el test en rojo, después el código.
+- **`ADR:`** `none`, o el título de la decisión de arquitectura o de política que toma este trabajo (el curator la registrará como ADR `Propuesto`). No inventes ADR para cambios triviales.
+- `Alcance:` lista las rutas que el job puede tocar (sin `**` global). La documentación del Brain del job no hace falta listarla.
+- Escribe solo dentro del job (`factory/jobs/<id>/`). Línea 2 de `spec.md`: `Surface: page | none`.
+- No inventes: si algo es ambiguo, déjalo fuera de alcance y dilo en Riesgos.
 
 ## Salida
 
 - `factory/jobs/<id>/spec.md`
 - `factory/jobs/<id>/tasks.md`
-
-## Formato spec.md
-
-```
-# Spec — <título>
-
-Surface: page | none
-
-## Objetivo de negocio
-...
-
-## Criterios de aceptación
-1. ...
-2. ...
-
-## Restricciones de arquitectura
-...
-
-## Tests esperados
-...
-
-## Riesgos
-...
-
-## Tareas (ver tasks.md)
-...
-```

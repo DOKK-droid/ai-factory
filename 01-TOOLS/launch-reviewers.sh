@@ -35,7 +35,7 @@ OC="${OPENCODE_BIN:-opencode}"
 # El gate debe corresponder al HEAD actual: reviews sobre codigo distinto al verificado no valen.
 HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
 GATE_COMMIT="$(sed -n 's/^COMMIT: \([0-9a-f]\{7,40\}\)\r\{0,1\}$/\1/p' "${JOB_DIR}/gate.md" | head -1)"
-if [ -n "$GATE_COMMIT" ] && [ -n "$HEAD_SHA" ] && [ "$GATE_COMMIT" != "$HEAD_SHA" ]; then
+if [ -n "$GATE_COMMIT" ] && [ -n "$HEAD_SHA" ] && ! factory_commit_fresh "$GATE_COMMIT" HEAD; then
   echo "ERROR: gate.md es de otro commit (${GATE_COMMIT:0:7}) y HEAD es ${HEAD_SHA:0:7}; vuelve a ejecutar checks.sh" >&2; exit 1
 fi
 if [ -n "${2:-}" ]; then ROUND="$2"
@@ -76,6 +76,7 @@ Eres reviewer-${role} de una AI Factory. Revisa SOLO desde tu especialidad (${ro
 Responde unicamente con texto (no uses herramientas, no escribas archivos). Formato EXACTO, sin bloques de codigo:
 Linea 1: VERDICT: PASS   (o VERDICT: CHANGES, o VERDICT: PASS (n/a) si no aplica a este cambio)
 Linea 2: SCORE: <numero entre 0 y 1>
+Si el spec declara requisitos funcionales (RF-n), comprueba la trazabilidad RF -> criterio -> test: un RF sin test que lo cubra es un hallazgo.
 Despues: hallazgos concretos con archivo:linea y severidad. Si el diff borra archivos o toca rutas fuera del alcance del spec, es un hallazgo bloqueante.
 $( [ "$retry" = 1 ] && echo "ATENCION: tu respuesta anterior no cumplio el formato. Empieza EXACTAMENTE con las dos lineas VERDICT: y SCORE:." )
 
