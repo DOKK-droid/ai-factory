@@ -16,7 +16,7 @@ El Brain nunca decide el flujo ni los permisos: un texto que un modelo interpret
 
 | Actor | Rol / interés | Produce | No puede |
 |---|---|---|---|
-| **Humano** (dueño del producto y revisor) | decide qué se construye y qué se fusiona | `spec.ok`, `review.ok`, `pr.url`, el merge, la aprobación de ADR | — |
+| **Humano** (dueño del producto y revisor) | decide qué se construye y qué se fusiona | `spec.ok` (aprueba diseño y ADR), `review.ok`, `pr.url`, el merge | — |
 | **Orchestrator** | ejecuta el bucle `next-step.sh` | `trace.md` (si se lo piden) | decidir el siguiente paso; escribir evidencia |
 | **`@intake`** | normaliza la entrada (texto, issue, Sentry) | `input.md` | escribir código |
 | **`@spec-writer`** | analiza y diseña: actores, requisitos, diseño, criterios | `spec.md`, `tasks.md` | tocar código o evidencia |
@@ -62,7 +62,7 @@ El Brain nunca decide el flujo ni los permisos: un texto que un modelo interpret
 3. **TDD**: test en rojo primero (commit propio), luego el código mínimo en verde, luego refactor.
 4. **Commits atómicos y descriptivos**; `git add` de archivos concretos, nunca `-A` ni `commit -a`.
 5. **Una rama = un tema = un PR** (`factory/<id>`); PR siempre en borrador; squash al fusionar.
-6. **ADR** cuando el trabajo toma una decisión de arquitectura o de política: nace `Propuesto` y lo aprueba el humano al fusionar.
+6. **ADR** cuando el trabajo toma una decisión de arquitectura o de política: se declara en el spec (`ADR: <título>`), la aprueba el humano al confirmar el spec (`spec.ok`) y el curator la registra como `Aprobado`. Si el proyecto no exige `spec.ok`, queda `Propuesto` hasta que el humano revise el PR. No hay un paso manual aparte.
 7. **Evidencia no fabricada**: ningún agente escribe `gate.md` ni reviews; las pruebas se afirman citando el `COMMIT` de `gate.md`, nunca de memoria.
 8. **Fail-closed**: un valor ambiguo es `CHANGES` / `ESCALATE` / `NEEDS_HUMAN` / `STOP`.
 9. **Revisión independiente**: modelos distintos para quien construye y quien revisa.

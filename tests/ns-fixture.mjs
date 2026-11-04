@@ -73,8 +73,9 @@ export function fx({ project = null, config = null, remote = true, id = 'job-1',
   git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'base');
   if (remote) { git(repo, 'remote', 'add', 'origin', origin); git(repo, 'push', '-q', '-u', 'origin', 'main'); }
 
+  const requireSpecOk = !(project && typeof project === 'object' && project.require_spec_ok === false);
   const full = !!(project && typeof project === 'object' && project.spec_profile === 'full');
-  const f = { full, repo, origin, id, wt: path.join(repo, 'factory/worktrees', id), job: path.join(repo, 'factory/jobs', id), gh: null };
+  const f = { full, requireSpecOk, repo, origin, id, wt: path.join(repo, 'factory/worktrees', id), job: path.join(repo, 'factory/jobs', id), gh: null };
   const env = (extra = {}) => {
     const e = { ...process.env, GH_BIN: f.gh || '/nonexistent/gh', ...extra };
     for (const k of ['FACTORY_JOBS_DIR', 'FACTORY_CONFIG', 'FACTORY_BASE', 'FACTORY_REQUIRE_SPEC_OK', 'FACTORY_LOW_RESOURCES']) if (!(k in extra)) delete e[k];
@@ -108,7 +109,7 @@ export function fx({ project = null, config = null, remote = true, id = 'job-1',
   f.human = (l1 = 'NEEDS_HUMAN', summary = true) => put(path.join(f.job, 'human.md'), `${l1}\n\n## Riesgos detectados\n- Ninguno.\n${summary ? '\n## Resumen para el humano\nTodo bien.\n' : ''}`);
   f.trace = (brain = 'Brain: sin cambios') => put(path.join(f.job, 'trace.md'), `# trace\n${brain}\n`);
   /** Simula al memory-curator: escribe el Brain EN LA WORKTREE (sin commitear) y la linea Brain: de trace.md. */
-  f.curate = ({ skipHeading = null, gateSha = true, listJobPage = true, extraPage = null } = {}) => {
+  f.curate = ({ skipHeading = null, gateSha = true, listJobPage = true, extraPage = null, adrStatus = (f.requireSpecOk === false ? 'Propuesto' : 'Aprobado') } = {}) => {
     const spec = fs.readFileSync(path.join(f.job, 'spec.md'), 'utf8'); const gate = fs.readFileSync(path.join(f.job, 'gate.md'), 'utf8');
     const adr = (spec.match(/^ADR:\s*(.*)$/m) || [])[1] || 'none'; const sha7 = (gate.match(/^COMMIT: (\w{7})/m) || [])[1];
     const pages = []; const wt = (rel) => path.join(f.wt, rel);
@@ -122,7 +123,7 @@ export function fx({ project = null, config = null, remote = true, id = 'job-1',
     if (adr !== 'none') {
       const dec = fs.readFileSync(wt('02-DOCS/wiki/sdd/decisions.md'), 'utf8');
       const n = Math.max(...[...dec.matchAll(/^## ADR-0*(\d+):/gm)].map((m) => +m[1]), 0) + 1;
-      write(wt('02-DOCS/wiki/sdd/decisions.md'), dec + `\n## ADR-${String(n).padStart(3, '0')}: ${adr}\nEstado: Propuesto\n`); pages.push('02-DOCS/wiki/sdd/decisions.md');
+      write(wt('02-DOCS/wiki/sdd/decisions.md'), dec + `\n## ADR-${String(n).padStart(3, '0')}: ${adr}\nEstado: ${adrStatus}\n`); pages.push('02-DOCS/wiki/sdd/decisions.md');
     }
     if (extraPage) { write(wt(extraPage), 'x\n'); pages.push(extraPage); }
     put(path.join(f.job, 'trace.md'), `# trace\nBrain: ${pages.join(', ')}\n`);

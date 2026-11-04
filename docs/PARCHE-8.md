@@ -38,7 +38,7 @@ Un modelo gratuito no sigue de forma fiable 11 pasos escritos en prosa: se salt�
 | `factory/scripts/spec-lint.mjs` | **Nuevo.** Valida la estructura del spec y la trazabilidad RF → criterio → tarea según el perfil |
 | `factory/scripts/scope-check.mjs` | las páginas del curator nunca están fuera de alcance; `## Alcance` también se parsea |
 | `02-DOCS/wiki/sdd/{methodology,spec-template,job-page-template}.md` | **Nuevas.** Metodología (actores, fases, requisitos de la fábrica, buenas prácticas, DoD) y plantillas |
-| `02-DOCS/wiki/sdd/decisions.md` | ADR-008 (plano de control) y ADR-009 (Brain en el PR, ADR propuestos, perfil full), ambos `Propuesto` |
+| `02-DOCS/wiki/sdd/decisions.md` | ADR-008 (plano de control), ADR-009 (Brain en el PR, ADR aprobado con `spec.ok`, perfil full) y ADR-010 (modelos vigentes); los ADR-001 y ADR-005 pasan a `Reemplazado`, ADR-004 a `Parcial` y ADR-006 sigue `Inconcluso` |
 
 ## Tabla de estados (la primera condición verdadera gana)
 
@@ -101,7 +101,7 @@ Con `"spec_profile": "full"` cada job recorre y deja evidencia de todas las fase
 | Desarrollo | commits atómicos (test en rojo, luego código) | commits sobre la base; worktree limpia |
 | Pruebas | `gate.md` (con `COMMIT:`) | alcance, sintaxis, tests; atado al commit |
 | Revisión | 4 reviews, `decision.md`, `human.md` | formato; vigencia; línea 1 coherente |
-| Documentación | `jobs/<id>.md` (Resumen, Actores, RF, Diseño, Implementación, Pruebas, Lecciones), ADR `Propuesto`, `trace.md` | secciones, cita del commit del gate, ADR registrado, páginas existentes y permitidas |
+| Documentación | `jobs/<id>.md` (Resumen, Actores, RF, Diseño, Implementación, Pruebas, Lecciones), ADR (`Aprobado` si hubo `spec.ok`), `trace.md` | secciones, cita del commit del gate, ADR registrado, páginas existentes y permitidas |
 | Entrega | rama `factory/<id>` y PR en borrador con código + documentación | `origin` al día; PR |
 
 Trazabilidad que cierra el script: cada criterio cita `[RF-n]`, cada RF tiene criterio y aparece en `tasks.md`; los títulos de los tests citan el RF (lo revisan los reviewers).
