@@ -365,4 +365,4 @@ ADR-004 asumió que `03-SKILLS/` era el directorio que carga OpenCode y que `.ag
 
 ### Consecuencias
 - Antes de borrar se repitió la búsqueda de las tres rutas (sin referencias) y se confirmó que `opencode debug skill` sigue listando las cuatro skills de terceros desde `.agents/skills/`.
-- `install-into.sh` copia `03-SKILLS/` pero no `.agents/skills/`: un proyecto nuevo no recibe las skills de terceros hasta que se añada esa copia (con sus entradas de `skills-lock.json`) o se instalen con `npx @ericrisco/rsc`. Queda pendiente.
+- `install-into.sh` copia `03-SKILLS/` y también `.agents/skills/` con sus entradas de `skills-lock.json` (se añaden las que faltan; nunca se pisa una entrada del destino). La carpeta de skills de terceros depende del motor (`--engine`, por defecto `opencode`); solo se añade un motor cuando su ruta está verificada, y uno desconocido se rechaza.
