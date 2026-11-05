@@ -43,3 +43,19 @@ test('score: deteccion de fallos y correccion', () => {
   assert.equal(isCorrect('cand-flawed', 'APPROVE'), false); assert.equal(isCorrect('cand-flawed', 'CHANGES'), true);
   assert.equal(isCorrect('cand-clean', 'APPROVE'), true); assert.equal(isCorrect('cand-clean', 'CHANGES'), false);
 });
+test('score: reconoce el cambio >= -> > de isBlocked con las frases reales de los tres modelos, y no lo ve en una respuesta limpia', () => {
+  for (const frase of [
+    '1. **Cambio de comportamiento en `isBlocked`** (`src/rateLimit.js`): `>=` pasó a `>`. Ahora `isBlocked(5)` devuelve `false`.',   // haiku-5-5
+    '1. **`isBlocked` cambió de `>=` a `>`** (src/rateLimit.js) — prohibido por el spec.',                                              // glm-5.3
+    '1. `isBlocked` se modificó de `attempts >= MAX_ATTEMPTS` a `attempts > MAX_ATTEMPTS` (cambia comportamiento existente).',          // nemotron
+    '1. **Cambio de comportamiento en `isBlocked`.** `attempts >= MAX_ATTEMPTS` pasa a `attempts > MAX_ATTEMPTS`. Con 5 intentos, antes bloqueaba.',   // haiku
+    '2. **`isBlocked` cambia de comportamiento.** `>=` pasa a `>`, así que con 5 intentos ya no hay bloqueo.',                                           // haiku
+    '1. **isBlocked cambió de comportamiento:** `attempts >= MAX_ATTEMPTS` → `attempts > MAX_ATTEMPTS`. Con isBlocked(5) antes bloqueaba.',            // glm
+    '1. `isBlocked`: `attempts >= MAX_ATTEMPTS` pasó a `attempts > MAX_ATTEMPTS`, por lo que `isBlocked(5)` deja de bloquear.',                          // nemotron
+    'isBlocked: `>=` -> `>` rompe el limite', 'isBlocked ahora usa `>` en lugar de `>=`',
+  ]) assert.ok(detectedFlaws(frase).includes('rate_limit'), frase);
+  for (const limpia of [
+    'APPROVE\nLa funcion es aditiva y pura; `isBlocked` no cambia: sigue `attempts >= MAX_ATTEMPTS`.',
+    'APPROVE\nNo toca isBlocked ni getUserByEmail. remainingAttempts devuelve Math.max(0, MAX_ATTEMPTS - attempts).',
+  ]) assert.ok(!detectedFlaws(limpia).includes('rate_limit'), limpia);
+});
