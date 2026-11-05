@@ -12,6 +12,7 @@
 | plantilla de job | `02-DOCS/wiki/sdd/job-page-template.md` | Estructura de la página que documenta cada job |
 | glosario | `02-DOCS/wiki/sdd/glossary.md` | Términos del proyecto |
 | documentación por job | `02-DOCS/wiki/jobs/<id>.md` | Qué se construyó, diseño, pruebas (con el commit del gate) y lecciones de cada job; viaja en el PR del job |
+| job prueba-sencillo-completo-261105-a332 | `02-DOCS/wiki/jobs/prueba-sencillo-completo-261105-a332.md` | Utilidad `clamp` con test TDD; job de prueba del pipeline de punta a punta (gate PASS en `62b3e15`, decisión APPROVE) |
 | errores recurrentes | `02-DOCS/wiki/sdd/errors.md` | Errores recurrentes y cómo se resolvieron |
 | incidentes por zona | `02-DOCS/wiki/sdd/incidents.md` | Incidentes registrados por zona de código |
 | installation plan | `02-DOCS/wiki/harness/installation-plan.md` | Plan de instalación RSC |
