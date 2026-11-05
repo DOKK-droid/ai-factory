@@ -83,7 +83,7 @@ function availableModels() {
   const ttlS = envInt('FACTORY_MODELS_CACHE_TTL_S', DEFAULT_CACHE_TTL_S, { allowZero: true });
   const file = cacheFile(bin);
   const cached = readCache(file, ttlS);
-  if (cached) return { ids: cached, error: null };
+  if (cached) return { ids: cached, error: null, cached: true };
   const r = spawnSync(bin, ['models'], { encoding: 'utf8', timeout: timeoutMs });
   if (r.error && (r.error.code === 'ETIMEDOUT' || r.signal)) {
     return { ids: null, error: `\`opencode models\` no respondio en ${Math.round(timeoutMs / 1000)} s (timeout). Sube el limite con FACTORY_MODELS_TIMEOUT_MS=<milisegundos>.` };
@@ -106,12 +106,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const c = JSON.parse(fs.readFileSync('factory/config.json', 'utf8'));
     for (const [t, id] of Object.entries(c.tiers || {})) wanted.push([`tier ${t}`, id]);
   }
-  const { ids: have, error } = availableModels();
+  const { ids: have, error, cached } = availableModels();
   if (!have || have.size === 0) { console.error(`ERROR: no pude obtener la lista de modelos: ${error || 'la lista esta vacia'} No se asume que los modelos existan.`); process.exit(3); }
   let bad = 0;
   for (const [origin, id] of wanted) {
     if (!id) { console.error(`FALTA: ${origin} no declara model:`); bad++; }
-    else if (!have.has(id)) { console.error(`NO EXISTE: ${origin} usa "${id}", que no aparece en opencode models`); bad++; }
+    else if (!have.has(id)) { console.error(`NO EXISTE: ${origin} usa "${id}", que no aparece en opencode models${cached ? ' (lista en cache; si acabas de anadir un proveedor, repite con FACTORY_MODELS_CACHE_TTL_S=0)' : ''}`); bad++; }
   }
   if (bad) process.exit(1);
   console.log(`OK: ${wanted.length} modelos verificados contra opencode models (${have.size} disponibles)`);

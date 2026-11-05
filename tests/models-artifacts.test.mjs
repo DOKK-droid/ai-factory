@@ -80,6 +80,14 @@ test('validate-models: una cache vigente pero vacia o corrupta se ignora', () =>
   const [f] = fs.readdirSync(path.join(d, 'tmpdir')); fs.writeFileSync(path.join(d, 'tmpdir', f), 'basura\n');
   assert.equal(vmLive(d, bin).status, 0); assert.equal(calls(d), 2);
 });
+test('validate-models: NO EXISTE con la lista en cache avisa de FACTORY_MODELS_CACHE_TTL_S=0; con lista fresca no', () => {
+  const { d, bin } = liveProject();
+  assert.equal(vmLive(d, bin).status, 0);
+  write(path.join(d, '.opencode/agent/two.md'), '---\nmodel: c/z\n---\nx\n');
+  const r = vmLive(d, bin); assert.equal(r.status, 1); assert.match(r.stderr, /NO EXISTE.*c\/z/); assert.match(r.stderr, /FACTORY_MODELS_CACHE_TTL_S=0/);
+  const f = vmLive(d, bin, { FACTORY_MODELS_CACHE_TTL_S: '0' });
+  assert.equal(f.status, 1); assert.match(f.stderr, /NO EXISTE.*c\/z/); assert.doesNotMatch(f.stderr, /cache/i);
+});
 test('validate-models: una salida vacia o invalida nunca se cachea', () => {
   const { d, bin } = liveProject({ out: 'basura\n' });
   vmLive(d, bin); vmLive(d, bin);
