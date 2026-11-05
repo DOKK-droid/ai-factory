@@ -10,4 +10,4 @@ echo "== Estado del repo local =="
 HP="$(git config core.hooksPath || true)"
 if [ "$HP" = ".hooks/git" ]; then echo "OK: core.hooksPath=.hooks/git (git hooks activos)"; else echo "AVISO: git hooks NO activos. Ejecuta: npm run hooks:install"; fi
 [ -f .opencode/plugins/factory-guard.js ] && echo "OK: plugin factory-guard.js presente" || { echo "ERROR: falta el plugin"; exit 1; }
-echo "RECORDATORIO: prueba tambien EN VIVO dentro de OpenCode (ver PATCH_INSTRUCCIONES.md, paso 6)."
+echo "RECORDATORIO: prueba tambien EN VIVO dentro de OpenCode (ver docs/PRUEBAS-FABRICA.md)."
