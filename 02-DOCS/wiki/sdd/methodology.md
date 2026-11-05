@@ -42,18 +42,9 @@ El Brain nunca decide el flujo ni los permisos: un texto que un modelo interpret
 | **Documentación** | 11 | dejar el conocimiento versionado en el PR | `02-DOCS/wiki/jobs/<id>.md`, ADR, `index.md`, `trace.md` | memory-curator |
 | **Entrega** | 12–14 | subir la rama y abrir el PR en borrador; el humano fusiona | rama `factory/<id>`, PR | orchestrator, humano |
 
-## 4. Requisitos funcionales de la fábrica
+## 4. Requisitos funcionales de cada proyecto
 
-- **RF-F1** Normalizar cualquier entrada (texto, issue, Sentry) a `input.md`.
-- **RF-F2** Producir un spec con actores, requisitos funcionales numerados, diseño, ADR y criterios trazables.
-- **RF-F3** Exigir la confirmación del humano antes de construir (`spec.ok`).
-- **RF-F4** Construir con TDD en una worktree aislada, con commits atómicos.
-- **RF-F5** Verificar de forma determinista (alcance, sintaxis, tests) y atar el resultado al commit.
-- **RF-F6** Revisar con 4 reviewers sobre el diff real, guardados por un script.
-- **RF-F7** Consolidar en una decisión y evaluar el riesgo (`risk.sh`); ante duda, `NEEDS_HUMAN`.
-- **RF-F8** Documentar cada job en el Brain, dentro del mismo PR.
-- **RF-F9** Entregar siempre un PR en borrador; nunca push a `main` ni merge automático.
-- **RF-F10** Dejar traza completa y auditable en `factory/jobs/<id>/`.
+Esta página describe el **método**, igual para cualquier proyecto. Los requisitos funcionales **no** viven aquí: cada spec (perfil `full`) numera los suyos como `RF-n` y los traza a criterios, tareas y tests. El contexto del proyecto (qué es, para quién, stack, restricciones) está en `02-DOCS/wiki/context.md`, no en esta página.
 
 ## 5. Buenas prácticas obligatorias
 
