@@ -16,6 +16,8 @@ opencode debug config | node factory/scripts/probe-permissions.mjs   # 0 FAIL, e
 - La sonda lee el valor enmascarado desde `opencode.json` y la plantilla, no desde lo que OpenCode aplica. Si se edita `/etc/opencode/opencode.json` a mano, solo `install-managed.sh --check` lo detecta: mantén ese orden en el paso 0.
 - El número de tests de `node --test` cuenta subtests y no es comparable entre máquinas ni versiones de Node (681 aquí, 334 en otra). Lo que importa es `fail 0`.
 - Reinicia OpenCode (carga el plugin nuevo).
+- **Vacía el historial del guard** (desde TU terminal): `mkdir -p factory/logs && : > factory/logs/blocked.log`. Así, todo lo que aparezca después es de esta prueba. El orchestrator NO debe leer ese archivo: el historial de sesiones viejas lo llevó a creer que `01-TOOLS/` no se puede ejecutar.
+- Si el orchestrator dice "bloqueado", exígele el error literal del comando que ejecutó. Sin esa cita, no está bloqueado: es una deducción suya.
 
 ## 1. Guard sin falsos positivos
 
@@ -85,10 +87,15 @@ En `trace.md`: `spec.md` lo escribió `@spec-writer`, `decision.md` lo escribió
 Si un modelo gratuito no respeta el formato, el review debe quedar `VERDICT: CHANGES` / `SCORE: 0` y registrarse.
 Anota qué rol falló para subirlo de tier en `factory/config.json` (cambio tuyo: el archivo está protegido).
 
-## 9. Después
+## 9. Después (lo lees tú, no el orchestrator)
 
 ```bash
-tail factory/logs/blocked.log
+cat factory/logs/blocked.log
+for r in security ux ui code; do head -2 factory/jobs/<id>/round-1/review-$r.md; done
+bash 01-TOOLS/validate-artifacts.sh <id> 1; echo "exit=$?"
+head -1 factory/jobs/<id>/gate.md
 ```
+
+Señales de que algo se hizo "a mano" (falso verde): `round-1/` no existe o sus archivos tienen la hora del orchestrator y no la de `launch-reviewers.sh`; `gate.md` sin la línea de alcance/sintaxis que escribe `checks.sh`; `job.json` con `created` redondo (`T00:00:00Z`). Si los ves, la prueba no cuenta.
 
 Anota cualquier bloqueo inesperado con el comando exacto.

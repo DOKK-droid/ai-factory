@@ -29,8 +29,11 @@ const INTERPRETERS = new Set(['python', 'python3', 'node', 'nodejs', 'deno', 'bu
 const ENV_MENTION_RE = /(^|[^\w])\.env(?!\w)(?![.\w]*(?:example|sample|template))/;
 
 /** Ruta de destino protegida? Los directorios (terminan en "/") por prefijo; los archivos por nombre exacto. */
+/** Evidencia del pipeline: solo la escriben los scripts (checks.sh, launch-reviewers.sh), nunca un agente a mano. */
+const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|round-[^/]+\/review-[^/]+\.md)$/;
 export function isProtectedPath(target) {
   const t = String(target).replace(/\\/g, '/').replace(/^\.\//, '');
+  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md y round-N/review-*.md (los escriben checks.sh y launch-reviewers.sh)';
   return PROTECTED_PATHS.find((p) => (p.endsWith('/') ? t.startsWith(p) || t.includes('/' + p) : t === p || t.endsWith('/' + p)));
 }
 /** El texto (codigo de un intérprete) menciona rutas protegidas o archivos .env? */

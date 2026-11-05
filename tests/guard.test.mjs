@@ -62,7 +62,7 @@ test('herramientas: bloquea read de .env y edit de archivos protegidos', () => {
 });
 
 test('plugin: lee output.args.command y lanza error al bloquear', async () => {
-  const hooks = await factoryGuard({ directory: process.cwd() });
+  const hooks = await factoryGuard({ directory: fs.mkdtempSync(path.join(os.tmpdir(), 'af-plug-')) });
   const before = hooks['tool.execute.before'];
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'git push origin main' } }), /BLOCKED by factory-guard/);
   await assert.doesNotReject(before({ tool: 'bash' }, { args: { command: 'git status' } }));

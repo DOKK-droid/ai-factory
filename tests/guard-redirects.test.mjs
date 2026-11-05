@@ -66,3 +66,17 @@ test('los errores de forma son kind=policy; main/force/rodeos son kind=grave', (
   assert.equal(classifyBash('gh pr create --title x').kind, 'policy');
   assert.equal(classifyBash('echo FACTORY_HUMAN=1').kind, 'grave');
 });
+
+test('gate.md y los reviews de un job solo los escriben los scripts: ningun agente, ni por edit ni por bash', async () => {
+  const { classifyTool } = await import('../factory/scripts/command-guard.mjs');
+  for (const f of ['factory/jobs/j1/gate.md', '/home/u/ai-factory/factory/jobs/j1/gate.md', 'factory/jobs/j1/round-1/review-code.md']) {
+    assert.equal(classifyTool('write', { filePath: f }).blocked, true, f);
+    assert.equal(classifyBash(`echo x > ${f}`).blocked, true, f);
+    assert.equal(classifyBash(`tee ${f}`).blocked, true, f);
+  }
+  // leer y ejecutar los scripts que los producen sigue permitido; decision/human/spec los escriben sus agentes
+  assert.equal(classifyBash('cat factory/jobs/j1/gate.md').blocked, false);
+  assert.equal(classifyBash('cd factory/worktrees/j1 && bash 01-TOOLS/checks.sh j1 2>&1').blocked, false);
+  for (const f of ['spec.md', 'tasks.md', 'decision.md', 'human.md', 'input.md', 'trace.md'])
+    assert.equal(classifyTool('write', { filePath: `factory/jobs/j1/${f}` }).blocked, false, f);
+});
