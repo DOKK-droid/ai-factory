@@ -45,6 +45,17 @@ test('approver y human-gate leen el historial de la worktree con git -C, acotado
   }
 });
 
+test('orchestrator: regla para peticiones que no son un job (solo texto; no prueba el comportamiento del modelo)', () => {
+  const txt = fs.readFileSync(path.join(ROOT, '.opencode/agent/orchestrator.md'), 'utf8');
+  assert.match(txt, /Si la petición no es una tarea de software/);
+  for (const f of ['PATCH', 'PARCHE', 'NEXT-STEPS-FABRICA']) assert.ok(txt.includes(f), `la regla debe nombrar ${f}`);
+  assert.match(txt, /no crees un job/);
+  // sigue sin poder escribir fuera de trace.md
+  const edit = perms('orchestrator').edit;
+  for (const v of ['factory/jobs/j/trace.md']) assert.equal(decide(edit, v), 'allow');
+  for (const v of ['factory/jobs/j/pr.url', 'factory/jobs/j/gate.md', 'factory/jobs/j/decision.md', 'factory/jobs/j/human.md', 'docs/PATCH-5.md', '01-TOOLS/next-step.sh']) assert.equal(decide(edit, v), 'deny', v);
+});
+
 test('builder: cada PROTECTED_PATH esta denegado (relativa y absoluta)', () => {
   const rules = perms('builder').edit;
   for (const p of PROTECTED_PATHS) {
