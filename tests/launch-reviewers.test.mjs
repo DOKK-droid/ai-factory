@@ -91,7 +91,7 @@ test('limpia vallas ``` y texto previo de la respuesta del modelo', () => {
 });
 test('vigilante por inactividad: mata al reviewer colgado y sigue con los demas', () => {
   const s = setup(); const t0 = Date.now();
-  const r = launch(s, { STUB_MODE_REVIEWER_CODE: 'hang', REVIEW_IDLE_SECS: '2', REVIEW_RETRIES: '0', REVIEW_MAX_PARALLEL: '2' });
+  const r = launch(s, { STUB_MODE_REVIEWER_CODE: 'hang', REVIEW_IDLE_SECS: '2', REVIEW_RETRIES: '0' });
   assert.equal(r.status, 3); assert.match(review(s, 'code'), /inactivo 2s/); assert.match(review(s, 'security'), /^VERDICT: PASS/);
   assert.ok(Date.now() - t0 < 60000);
 });
