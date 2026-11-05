@@ -49,23 +49,43 @@ Después ejecutas tú `touch factory/logs/RESET` y la sesión reanuda sin reinic
 
 Deben denegar tanto la config managed como el guard (mira `factory/logs/blocked.log`).
 
+## 3b. `next-step.sh` a mano, ANTES de usar el orchestrator
+
+El orden del flujo lo decide un script, no el modelo. Pruébalo tú solo (no escribe nada):
+
+```bash
+ID=$(bash 01-TOOLS/next-step.sh --new-id); echo $ID
+bash 01-TOOLS/next-step.sh $ID                        # RUN: bash 01-TOOLS/new-job.sh <id>   (estado 0)
+bash 01-TOOLS/new-job.sh $ID                          # lo ejecutas tú
+bash 01-TOOLS/next-step.sh $ID                        # DELEGATE: @intake ...                (estado 1)
+```
+
+Recorre a mano los primeros estados creando los artefactos **de un job de prueba** (nunca de uno real: sería fabricar evidencia) y comprueba que cada llamada cambia de estado; `echo $?` vale 0 con `RUN/DELEGATE/DONE` y 2 con `STOP`. Dos llamadas seguidas dan la misma salida. Con un `spec.md` válido y sin `spec.ok` debe salir `STOP: HUMAN_CONFIRM_SPEC` con el `CMD: touch factory/jobs/<id>/spec.ok` (esa marca la creas tú).
+
 ## 4. Job mínimo end-to-end
 
-Con el orchestrator, tarea trivial `Surface: none` (una función con su test), `fast_path` apagado.
+Con `FACTORY_LOW_RESOURCES=1` (reviewers de uno en uno), tarea trivial `Surface: none` (una función con su test), `fast_path` apagado.
+Lanza `/factory "<tarea>"` (el id sale descriptivo, p. ej. `funcion-clamp-numeros-261104-8acd`) y **no le recuerdes nada**: el orchestrator solo hace el bucle de `next-step.sh`. Cuando salga `STOP: HUMAN_CONFIRM_SPEC`, lee el spec y ejecuta tú el `touch`; vuelve a lanzar `/factory <id>`.
 En `factory/jobs/<id>/` deben existir:
 
 - `input.md`
-- `spec.md` (con `Alcance:`)
+- `spec.md` (con `Alcance:`) y `spec.ok` (lo creaste tú)
 - `tasks.md`
-- `gate.md` con `GATE: PASS` real, sin `UNVERIFIED_TESTS`
-- `round-1/review-{security,ux,ui,code}.md`: línea 1 `VERDICT:` válido, línea 2 `SCORE:`
+- `gate.md` con `GATE: PASS` real, sin `UNVERIFIED_TESTS`, y la línea 2 `COMMIT: <sha>` igual al HEAD de la worktree
+- `round-1/review-{security,ux,ui,code}.md`: línea 1 `VERDICT:` válido, línea 2 `SCORE:`; y `round-1/.commit` igual al HEAD
 - `decision.md`
-- `human.md` (`NEEDS_HUMAN` por defecto)
-- `trace.md`
+- `human.md` (`NEEDS_HUMAN` por defecto, con `## Resumen para el humano`)
+- `trace.md` con una línea `Brain: ...` que lista páginas que **existen en la worktree**
+- Con `spec_profile: full`: `spec.md` con `Actores`, `Requisitos funcionales` (RF-n), `Diseño` y `ADR:`; y en la worktree `02-DOCS/wiki/jobs/<id>.md` (6 secciones, cita el commit de `gate.md`) en un commit `docs(brain)` que **aparece en el PR**
 
 ```bash
 bash 01-TOOLS/validate-artifacts.sh <id> 1; echo $?    # 0
+bash 01-TOOLS/next-step.sh <id>                        # DONE (o STOP: HUMAN_CREATE_PR si no hay gh)
+git -C factory/worktrees/<id> diff --name-only origin/main...HEAD   # código + 02-DOCS/wiki/jobs/<id>.md (+ index.md, + decisions.md si hubo ADR)
+git status --short 02-DOCS                             # el checkout principal NO debe tener Brain sin commitear
 ```
+
+**Lee tú la página del job** y contrasta cada afirmación sobre pruebas con `gate.md` y los reviews. El script comprueba que cita el commit del gate, no que sea verdad lo demás.
 
 ## 5. Delegación
 
@@ -96,6 +116,8 @@ bash 01-TOOLS/validate-artifacts.sh <id> 1; echo "exit=$?"
 head -1 factory/jobs/<id>/gate.md
 ```
 
-Señales de que algo se hizo "a mano" (falso verde): `round-1/` no existe o sus archivos tienen la hora del orchestrator y no la de `launch-reviewers.sh`; `gate.md` sin la línea de alcance/sintaxis que escribe `checks.sh`; `job.json` con `created` redondo (`T00:00:00Z`). Si los ves, la prueba no cuenta.
+Señales de que algo se hizo "a mano" (falso verde): `round-1/` no existe o sus archivos tienen la hora del orchestrator y no la de `launch-reviewers.sh`; `gate.md` sin las líneas `COMMIT:` / `GATE_FAIL_STREAK:` ni la línea de alcance/sintaxis que escribe `checks.sh`; `round-1/.commit` ausente; `job.json` con `created` redondo (`T00:00:00Z`). Si los ves, la prueba no cuenta.
+
+**Cuenta las acciones**: `next-step.sh` debe haber dicho cada paso. Si el orchestrator hizo algo que el script no pidió (escribir un artefacto, lanzar reviewers por Task), anótalo: es un fallo del prompt, no del flujo. Si un rol no respeta `VERDICT/SCORE`, sube **solo ese rol** de tier en `factory/config.json` (cambio tuyo).
 
 Anota cualquier bloqueo inesperado con el comando exacto.

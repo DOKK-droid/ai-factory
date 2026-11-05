@@ -19,7 +19,7 @@ const norm = (p) => String(p).trim().replace(/^\.\//, '').replace(/^["']|["']$/g
 /** Entradas de la seccion "Alcance:" del spec (lista con "- " hasta la primera linea que no lo sea). */
 export function parseScope(specText) {
   const lines = String(specText).split(/\r?\n/);
-  const i = lines.findIndex((l) => /^\s*alcance\s*:\s*$/i.test(l));
+  const i = lines.findIndex((l) => /^\s*(?:#{1,6}\s*)?alcance\s*:?\s*$/i.test(l));
   if (i < 0) return { found: false, globs: [] };
   const globs = [];
   for (let j = i + 1; j < lines.length; j++) {
@@ -45,13 +45,18 @@ export function globToRegExp(glob) {
   return new RegExp(`^${re}$`);
 }
 
+// Paginas del Brain que escribe el memory-curator: viajan en el PR del job sin tener que figurar en `Alcance:`.
+// Duplicada en 01-TOOLS/lib.sh (FACTORY_CURATOR_PATHS); un test comprueba que coinciden.
+export const CURATOR_PATHS = ['02-DOCS/wiki/jobs', '02-DOCS/wiki/index.md', '02-DOCS/wiki/sdd/decisions.md'];
+const isCurator = (p) => CURATOR_PATHS.some((c) => norm(p) === c || norm(p).startsWith(c + '/'));
+
 const TOO_BROAD = new Set(['*', '**', '**/*', '/', '.', './']);
 
 /** changes: [{status:'A'|'M'|'D', path}] -> { broad, out: [], delOut: [] } */
 export function checkScope(globs, changes) {
   const broad = globs.length === 0 || globs.some((g) => TOO_BROAD.has(g));
   const res = globs.map(globToRegExp);
-  const inScope = (p) => res.some((r) => r.test(norm(p)));
+  const inScope = (p) => isCurator(p) || res.some((r) => r.test(norm(p)));
   const out = []; const delOut = [];
   for (const c of changes) {
     if (inScope(c.path)) continue;

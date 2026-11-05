@@ -80,3 +80,29 @@ test('gate.md y los reviews de un job solo los escriben los scripts: ningun agen
   for (const f of ['spec.md', 'tasks.md', 'decision.md', 'human.md', 'input.md', 'trace.md'])
     assert.equal(classifyTool('write', { filePath: `factory/jobs/j1/${f}` }).blocked, false, f);
 });
+
+test('las marcas del humano (spec.ok, review.ok, pr.url) y el .commit de cada ronda: ningun agente las escribe (relativa y absoluta)', async () => {
+  const { classifyTool } = await import('../factory/scripts/command-guard.mjs');
+  for (const f of ['factory/jobs/j1/spec.ok', 'factory/jobs/j1/review.ok', 'factory/jobs/j1/pr.url', 'factory/jobs/j1/round-2/.commit',
+    '/home/u/ai-factory/factory/jobs/j1/spec.ok', './factory/jobs/j1/spec.ok']) {
+    assert.equal(classifyTool('write', { filePath: f }).blocked, true, f);
+    assert.equal(classifyBash(`echo x > ${f}`).blocked, true, f);
+    assert.equal(classifyBash(`touch ${f}`).blocked, true, f);
+    assert.equal(classifyBash(`tee ${f}`).blocked, true, f);
+  }
+  // leerlas sigue permitido
+  assert.equal(classifyBash('cat factory/jobs/j1/round-1/.commit').blocked, false);
+  assert.equal(classifyBash('ls factory/jobs/j1/spec.ok').blocked, false);
+});
+test('next-step.sh y factory/project.json: se ejecutan/leen, no se editan; FACTORY_REQUIRE_SPEC_OK es una puerta del humano', async () => {
+  const { classifyTool } = await import('../factory/scripts/command-guard.mjs');
+  for (const f of ['01-TOOLS/next-step.sh', 'factory/project.json', '/home/u/ai-factory/factory/worktrees/j/01-TOOLS/next-step.sh']) {
+    assert.equal(classifyTool('edit', { filePath: f }).blocked, true, f);
+    assert.equal(classifyBash(`sed -i s/a/b/ ${f}`).blocked, true, f);
+    assert.equal(classifyBash(`echo x >> ${f}`).blocked, true, f);
+  }
+  for (const c of ['bash 01-TOOLS/next-step.sh j1', 'bash 01-TOOLS/next-step.sh --new-id', 'cat factory/project.json', 'cd factory/worktrees/j1 && bash 01-TOOLS/next-step.sh j1'])
+    assert.equal(classifyBash(c).blocked, false, c);
+  for (const c of ['FACTORY_REQUIRE_SPEC_OK=0 bash 01-TOOLS/next-step.sh j1', 'export FACTORY_REQUIRE_SPEC_OK=0', 'env FACTORY_REQUIRE_SPEC_OK=0 bash 01-TOOLS/next-step.sh j1'])
+    assert.equal(classifyBash(c).blocked, true, c);
+});

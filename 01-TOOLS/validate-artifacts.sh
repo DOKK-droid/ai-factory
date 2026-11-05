@@ -3,6 +3,8 @@
 # Uso: bash 01-TOOLS/validate-artifacts.sh <job-id> [round]     (round por defecto: el ultimo)
 #   review-<x>.md (security, ux, ui, code): linea 1 `VERDICT: PASS|CHANGES|PASS (n/a)`, linea 2 `SCORE: 0..1`
 #   decision.md (si existe): linea 1 `APPROVE|CHANGES|ESCALATE`
+# VALIDATE_REVIEWS_ONLY=1 omite decision.md (next-step.sh y launch-reviewers.sh solo quieren validar los reviews).
+# Los archivos `.commit` y las lineas extra de gate.md (COMMIT, GATE_FAIL_STREAK) no se validan aqui.
 # Sale 0 solo si TODO es valido. Un valor ambiguo se trata como invalido (lado seguro).
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -24,7 +26,7 @@ for role in security ux ui code; do
 done
 
 d="${JOB_DIR}/decision.md"
-if [ -f "$d" ]; then
+if [ -f "$d" ] && [ "${VALIDATE_REVIEWS_ONLY:-0}" != "1" ]; then
   l1="$(head -1 "$d" | tr -d '\r')"
   if printf '%s\n' "$l1" | grep -qE '^(APPROVE|CHANGES|ESCALATE)$'; then echo "OK: ${d} -> ${l1}"
   else echo "FAIL: ${d} linea 1 sin decision valida (tiene: ${l1})"; FAILURES=$((FAILURES + 1)); fi

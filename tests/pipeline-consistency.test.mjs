@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyBash, classifyTool, PROTECTED_PATHS } from '../factory/scripts/command-guard.mjs';
+import { fx, fakeGh, drive } from './ns-fixture.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AGENTS = ['orchestrator', 'intake', 'spec-writer', 'builder', 'reviewer-security', 'reviewer-ux', 'reviewer-ui', 'reviewer-code', 'approver', 'human-gate', 'memory-curator'];
@@ -105,4 +106,52 @@ test('el prompt del orchestrator nombra cada script y agente que usa, y todos ex
   for (const a of txt.match(/@[a-z-]+/g) || []) assert.ok(AGENTS.includes(a.slice(1)), a);
   assert.match(txt, /launch-reviewers\.sh/); assert.match(txt, /NUNCA por Task/);
   assert.doesNotMatch(txt, /FACTORY_HUMAN=|FACTORY_GUARD_ALLOW_PROTECTED_EDIT=1/);
+});
+
+// ---- next-step.sh (plano de control) vs permisos reales de los agentes y del guard ----
+test('next-step.sh: cada DELEGATE puede escribir el artefacto que dice y cada RUN lo aceptan el guard y el allowlist del orchestrator', { timeout: 300000 }, () => {
+  const f = fx({ tools: true }); const gh = fakeGh(); f.gh = gh.bin; let n = 0;
+  const { actions, final } = drive(f, { humans: { HUMAN_CONFIRM_SPEC: () => f.confirm() }, agents: { approver: () => f.decision(++n === 1 ? 'CHANGES' : 'APPROVE') } });
+  assert.equal(final.first, 'DONE', actions.map((a) => a.first).join('\n'));
+  const seenAgents = new Set(); const seenRuns = [];
+  for (const a of actions) {
+    if (a.kind === 'DELEGATE') {
+      const parts = a.value.split(' | ').map((x) => x.trim()); assert.equal(parts.length, 3, `DELEGATE ambiguo (los campos van separados por ' | '): ${a.first}`);
+      const [who, , files] = parts; const agent = who.slice(1); seenAgents.add(agent);
+      assert.ok(AGENTS.includes(agent), agent);
+      for (const file of files.split(',')) {
+        const target = file.endsWith('/') ? file + 'src/x.js' : file;  // builder: la worktree entera
+        for (const v of [target, '/home/u/ai-factory/' + target]) {
+          assert.equal(decide(perms(agent).edit, v, 'deny'), 'allow', `${agent} no puede escribir ${v}`);
+          assert.equal(classifyTool('write', { filePath: v }).blocked, false, `el guard bloquea ${agent} -> ${v}`);
+        }
+      }
+    } else if (a.kind === 'RUN') {
+      seenRuns.push(a.value);
+      assert.equal(classifyBash(a.value).blocked, false, `el guard bloquea: ${a.value}`);
+      assert.equal(decide(perms('orchestrator').bash, a.value), 'allow', `el orchestrator no tiene permiso para: ${a.value}`);
+    }
+  }
+  for (const a of ['intake', 'spec-writer', 'builder', 'approver', 'human-gate', 'memory-curator']) assert.ok(seenAgents.has(a), `el recorrido no delego en ${a}`);
+  for (const re of [/new-job\.sh/, /checks\.sh/, /launch-reviewers\.sh job-1 2$/, /risk\.sh/, /^git push -u origin factory\//, /^gh pr create --draft/]) assert.ok(seenRuns.some((r) => re.test(r)), String(re));
+});
+test('next-step.sh: ningun agente puede crear las marcas del humano ni la evidencia que el script lee', () => {
+  for (const agent of AGENTS) {
+    const rules = perms(agent).edit; if (!rules.length) continue;
+    for (const f of ['factory/jobs/j/spec.ok', 'factory/jobs/j/review.ok', 'factory/jobs/j/pr.url', 'factory/jobs/j/gate.md', 'factory/jobs/j/round-1/.commit', 'factory/jobs/j/round-1/review-code.md', 'factory/project.json', '01-TOOLS/next-step.sh'])
+      assert.notEqual(decide(rules, f, 'deny'), 'allow', `${agent} podria escribir ${f}`);
+  }
+});
+test('next-step.sh: cada codigo STOP que puede emitir esta explicado en el prompt del orchestrator', () => {
+  const sh = fs.readFileSync(path.join(ROOT, '01-TOOLS/next-step.sh'), 'utf8'); const orch = fs.readFileSync(path.join(ROOT, '.opencode/agent/orchestrator.md'), 'utf8');
+  const codes = new Set([...sh.matchAll(/\bstop ([A-Z][A-Z_]+)/g)].map((m) => m[1])); assert.ok(codes.size >= 12, [...codes].join());
+  for (const c of codes) assert.ok(orch.includes(c), `el orchestrator no menciona STOP: ${c}`);
+  assert.match(orch, /next-step\.sh/); assert.match(orch, /Nunca elijas el siguiente paso por tu cuenta/);
+  assert.equal(decide(perms('orchestrator').bash, 'bash 01-TOOLS/next-step.sh job-1'), 'allow');
+  assert.equal(decide(perms('orchestrator').bash, 'bash 01-TOOLS/next-step.sh --new-id'), 'allow');
+});
+test('/factory: el comando delega en next-step.sh y empieza por el estado 0', () => {
+  const cmd = fs.readFileSync(path.join(ROOT, '.opencode/command/factory.md'), 'utf8');
+  assert.match(cmd, /next-step\.sh/); assert.match(cmd, /--new-id/); assert.match(cmd, /estado 0/); assert.match(cmd, /\$ARGUMENTS/);
+  for (const a of cmd.match(/@[a-z-]+/g) || []) assert.ok(AGENTS.includes(a.slice(1)), a);
 });

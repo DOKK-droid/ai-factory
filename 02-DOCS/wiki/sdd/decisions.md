@@ -5,7 +5,7 @@ Registro de decisiones arquitectónicas (ADR) de la AI Software Factory sobre Op
 ## ADR-001: Mapeo de modelos (tiers → OpenCode gratuitos)
 
 Fecha: 2026-10-29
-Estado: Aprobado
+Estado: Reemplazado por ADR-010 (los tiers y roles de esta tabla ya no coinciden con `factory/config.json`)
 
 ### Contexto
 La factory usa 4 tiers (opus, sonnet, sol, astra) para decorrelacionar errores entre builder y revisores. Cada tier se mapea a un modelo gratuito de OpenCode.
@@ -75,7 +75,7 @@ El video muestra un "camino rápido" donde el código va directo a main. En esta
 ## ADR-004: Skills en una sola copia y modelo del approver provisional
 
 Fecha: 2026-10-30
-Estado: Provisional (modelo del approver pendiente de A/B valido)
+Estado: Parcial (el modelo del approver quedó reemplazado por ADR-010; la limpieza de skills duplicadas NO se ejecutó: `.agents/skills/` aún contiene `code-review`, `receiving-code-review` y `test-driven-development`, y `patch-refactor/` sigue en el repo)
 
 ### Contexto
 `code-review`, `receiving-code-review` y `test-driven-development` existían dos veces: versión completa en `.agents/skills/` y versión resumida en `03-SKILLS/`. Dos copias con el mismo nombre confunden qué se carga y gastan contexto. Además, la configuración de la factory movió `approver` y `human-gate` a `sonnet` (deepseek) para decorrelacionar, pero `reviewer-code` usa el mismo modelo y el A/B que lo justificaría (paso 7 de PATCH_INSTRUCCIONES) aún no se ha ejecutado.
@@ -102,7 +102,7 @@ Se inspeccionó desde qué ruta carga OpenCode las skills. Todas las referencias
 ## ADR-005: Corrección de modelos gratuitos y asignación de roles
 
 Fecha: 2026-10-30
-Estado: Propuesto (IDs sin validar contra opencode models; basado en autoevaluacion)
+Estado: Reemplazado por ADR-010 (los IDs vigentes se validan con `factory/scripts/validate-models.mjs` y la asignación de roles cambió)
 
 ### Contexto
 El tier `sonnet` apuntaba a `opencode/deepseek-v4-flash-free`, un modelo que **no existe** en OpenCode (sugiere `deepseek-v4.1-flash-free`). Como consecuencia, reviewer-code, approver, human-gate, memory-curator e intake no podían responder ("Model not found"). Además, reviewer-code y approver compartían el mismo modelo, rompiendo la decorrelación de errores que justifica el A/B del paso 7.
@@ -155,7 +155,7 @@ Datos web corroboran: nemotron = mejor razonamiento/código; deepseek-v4.1 = cod
 ## ADR-006: Resultado A/B del approver (paso 7)
 
 Fecha: 2026-10-30
-Estado: Inconcluso (fixture defectuoso; repetir con el fixture del parche 5)
+Estado: Inconcluso (el A/B no se repitió; el approver vigente, `claude-haiku-5-5`, no fue evaluado por este A/B)
 
 ### Contexto
 Se ejecutó `tests/ab/run-ab.mjs --mode approver --runs 5` con 4 modelos gratuitos contra dos ramas: `cand-flawed` (3 fallos intencionados) y `cand-clean` (debería aprobarse).
@@ -181,6 +181,7 @@ El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con t
 - `factory/config.json` ya actualizado (sonnet → deepseek-v4.1-flash-free, reviewer-code → opus, spec-writer → sol, etc.).
 - `npm test` → 140 tests OK.
 - Pendiente: ejecutar `npm run factory:apply-models` y completar el A/B con glm y mimo si se desea mayor confianza.
+- **Estado vigente (2026-11-04)**: sigue abierto. El fixture ya se corrigió (parche 5), pero nadie volvió a ejecutar el A/B, y desde ADR-010 el approver es `opencode-go/claude-haiku-5-5`, que este A/B nunca probó. Para cerrarlo lo ejecuta el humano (consume cuota de `opencode-go`): `AB_TIMEOUT_MIN=60 node tests/ab/run-ab.mjs --models opencode-go/claude-haiku-5-5,opencode/glm-5.3-flash-free --mode approver --runs 5`, y anota el resultado aquí. Mientras tanto `fast_path` sigue desactivado (ADR-003).
 - **Nota (parche 4):** Los resultados del A/B anteriores se obtuvieron con el guard roto (todos UNKNOWN). Con el parche 4 aplicado, reejecutar tests/ab/run-ab.mjs --mode approver --runs 5 para obtener datos validos.
 
 ## Paso 6: Verificación en vivo — pendiente
@@ -249,3 +250,78 @@ Justificacion:
 - En la factory, con 4 revisores en paralelo y diffs complejos, el tiempo puede extenderse aun mas.
 - 10 horas da margen suficiente para cualquier demora sin bloquear el pipeline indefinidamente.
 Para ajustar: export REVIEW_TIMEOUT_SECS=72000 (20 horas) si se requiere mas margen.
+
+## ADR-008: Plano de control determinista (`next-step.sh`) separado del Brain
+
+Fecha: 2026-11-04
+Estado: Aprobado (al fusionar el PR que lo introduce)
+
+### Contexto
+Un modelo gratuito no sigue de forma fiable un pipeline de 11 pasos escrito en prosa: en una corrida real lanzó los reviewers por Task, escribió `gate.md` a mano y se saltó pasos. El orden de los pasos es una decisión de control, no de contenido.
+
+### Decisión
+El flujo lo decide `01-TOOLS/next-step.sh`, una máquina de estados de solo lectura y sin LLM que lee los artefactos del job y devuelve `RUN` / `DELEGATE` / `STOP` / `DONE`. El orchestrator solo ejecuta un bucle. El Brain aconseja (líneas `READ:`), el plano de control decide y los permisos (frontmatter, config managed, guard) hacen cumplir. La política de cada proyecto vive en `factory/project.json`, que solo edita el humano. Gate y reviews quedan atados al commit (`COMMIT:` / `round-N/.commit`).
+
+### Alternativas consideradas
+- Mejorar el prompt del orchestrator: rechazado, depende de que el modelo obedezca.
+- Que el Brain dicte el flujo: rechazado, un Brain desactualizado o mal leído dejaría pasar un paso sin que nada lo frene.
+
+### Consecuencias
+- El flujo es testeable sin LLM (`tests/next-step.test.mjs`).
+- Cualquier valor ambiguo termina en `STOP`: el sistema falla cerrado.
+- Cambiar el flujo exige cambiar código y tests, no un prompt.
+
+## ADR-009: El Brain viaja en el PR del job; el ADR se aprueba con `spec.ok`; perfil de spec `full`
+
+Fecha: 2026-11-04
+Estado: Aprobado (al fusionar el PR que lo introduce)
+
+### Contexto
+En una corrida real el `@memory-curator` escribió en el checkout principal: el Brain quedó sin commitear, fuera del PR y sin revisión, y recogió como lección una afirmación falsa ("24 tests preexistentes fallan") que no estaba en la evidencia. Además no había criterio para registrar ADR: la aprobación de un ADR nunca fue un paso del flujo (los ADR-001 a ADR-007 los escribieron sesiones de trabajo con el humano y el prompt del curator solo decía "ADR si aplica").
+
+### Decisión
+1. El curator escribe en la worktree del job solo `02-DOCS/wiki/jobs/<id>.md`, `index.md` y `sdd/decisions.md`; `commit-brain.sh` los commitea en la rama del job y viajan en el PR. Los commits que solo tocan esas páginas no invalidan el gate ni los reviews (`factory_commit_fresh`).
+2. El spec declara `ADR: none | <título>`. Si hay título, el curator añade el ADR y `next-step.sh` no deja subir la rama sin él. **El estado lo fija el flujo, no el curator**: la confirmación humana del spec (`spec.ok`) ya aprueba el diseño y la decisión que declara, así que el ADR se escribe `Aprobado`; si el proyecto no exige `spec.ok`, nadie la aprobó y se escribe `Propuesto` hasta que el humano revise el PR. Rechazar el PR descarta el ADR (no llega a `main`). `next-step.sh` comprueba el estado leyendo el bloque del ADR nuevo.
+3. Perfil de spec `full` (`factory/project.json`): Actores, Requisitos funcionales `RF-n`, Diseño y trazabilidad RF → criterio → tarea. La página del job debe citar el commit del gate: las pruebas se afirman con la evidencia.
+4. Los ids de job pueden ser descriptivos (`next-step.sh --new-id "frase corta"`): `<palabras>-<aammdd>-<4 hex>`.
+
+### Alternativas consideradas
+- Brain en una rama aparte: rechazado por ahora, añade push y PR automáticos; se puede reconsiderar.
+- Dejar el Brain sin versionar: rechazado, nadie lo revisa.
+
+### Consecuencias
+- El humano revisa código y documentación en el mismo PR, y no hay un paso manual aparte para aprobar ADR.
+- Las afirmaciones sobre pruebas son verificables contra `gate.md`.
+- Más estructura exigida al spec-writer: se activa por proyecto con `spec_profile`.
+- El `spec.ok` pasa a significar también "apruebo la decisión de arquitectura declarada": el resumen que se muestra al confirmar incluye `ADR a registrar`.
+
+## ADR-010: Modelos por rol vigentes y decorrelación (reemplaza a ADR-001 y ADR-005)
+
+Fecha: 2026-11-04
+Estado: Aprobado (documenta lo ya fusionado en el PR #8; se aprueba al fusionar el PR que lo introduce)
+
+### Contexto
+ADR-001 (todo con modelos gratuitos, 4 tiers) y ADR-005 (corrección de IDs y reparto por autoevaluación) describían una configuración que `factory/config.json` ya no tiene: el PR #8 movió los roles críticos a modelos de `opencode-go` de otras familias.
+
+### Decisión
+La fuente de verdad de la asignación es `factory/config.json`. Estado a esta fecha:
+
+| Rol | Tier | Modelo |
+|---|---|---|
+| builder | `go-builder` | `opencode-go/gpt-5.6-luna` |
+| reviewer-security | `go-security` | `opencode-go/grok-4.7` |
+| approver, human-gate | `go-approver` | `opencode-go/claude-haiku-5-5` |
+| spec-writer, reviewer-ux, reviewer-ui, reviewer-code, memory-curator | `sol` | `opencode/glm-5.3-flash-free` |
+| intake | `astra` | `opencode/mimo-v2.6-flash-free` |
+| orchestrator | `opus` | `opencode/nemotron-3.5-super-vl-free` |
+
+Criterio: quien construye (builder), quien aprueba (approver) y quien audita seguridad usan familias distintas (OpenAI, Anthropic, xAI), y `reviewer-code` va en una familia distinta del builder, para decorrelacionar errores. Los IDs se validan contra `opencode models` con `factory/scripts/validate-models.mjs`; el 2026-11-04 verificó 11 modelos de 161 disponibles. El tier `sonnet` sigue definido en `config.json` pero ningún rol lo usa.
+
+### Alternativas consideradas
+- Solo modelos gratuitos (ADR-001, ADR-005): reemplazado; los roles críticos pasaron a modelos Go.
+
+### Consecuencias
+- La elección del approver no está validada por el A/B (ADR-006, abierto).
+- spec-writer, tres reviewers y memory-curator comparten modelo (GLM): sus errores pueden estar correlacionados. Si baja la señal, subir de tier al menos un reviewer.
+- Cambiar un modelo es editar `factory/config.json` (archivo protegido, lo cambia el humano) y ejecutar `validate-models.mjs`.
+
