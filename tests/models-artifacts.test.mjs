@@ -32,6 +32,59 @@ test('validate-models: --agents limita; agente sin model: es error; lista no dis
   const r = run('node', [VM], { cwd: d, env: { ...process.env, FACTORY_MODELS_FILE: '', OPENCODE_BIN: '/no/existe/opencode' } });
   assert.equal(r.status, 3);
 });
+// ---- opencode falso: cuenta llamadas y puede dormir; TMPDIR propio para no tocar la cache real ----
+function fakeOpencode(d, { sleep = 0, out = 'a/x\nb/y\n' } = {}) {
+  const bin = path.join(d, 'fake-opencode');
+  write(bin, `#!/bin/sh\necho x >> "${d}/calls"\n${sleep ? `sleep ${sleep}\n` : ''}printf '${out.replace(/\n/g, '\\n')}'\n`);
+  fs.chmodSync(bin, 0o755);
+  return bin;
+}
+const calls = (d) => (fs.existsSync(path.join(d, 'calls')) ? fs.readFileSync(path.join(d, 'calls'), 'utf8').trim().split('\n').length : 0);
+const vmLive = (d, bin, env = {}) => run('node', [VM], { cwd: d, env: { ...process.env, FACTORY_MODELS_FILE: '', OPENCODE_BIN: bin, TMPDIR: path.join(d, 'tmpdir'), ...env } });
+const liveProject = (opts) => { const d = modelsProject(['a/x', 'b/y'], { one: 'a/x', two: 'b/y' }); fs.mkdirSync(path.join(d, 'tmpdir')); return { d, bin: fakeOpencode(d, opts) }; };
+
+test('validate-models: timeout de opencode models => 3 con mensaje de timeout y como subir el limite', () => {
+  const { d, bin } = liveProject({ sleep: 2 });
+  const r = vmLive(d, bin, { FACTORY_MODELS_TIMEOUT_MS: '200' });
+  assert.equal(r.status, 3); assert.match(r.stderr, /timeout/i); assert.match(r.stderr, /FACTORY_MODELS_TIMEOUT_MS/);
+  assert.doesNotMatch(r.stderr, /no esta instalado/);
+});
+test('validate-models: no instalado y salida vacia dan mensajes distintos al timeout', () => {
+  const { d } = liveProject();
+  const r1 = vmLive(d, '/no/existe/opencode'); assert.equal(r1.status, 3); assert.match(r1.stderr, /no esta instalado/); assert.doesNotMatch(r1.stderr, /timeout/i);
+  const empty = liveProject({ out: 'sin modelos aqui\n' });
+  const r2 = vmLive(empty.d, empty.bin); assert.equal(r2.status, 3); assert.match(r2.stderr, /vacia|inesperado/); assert.doesNotMatch(r2.stderr, /timeout/i);
+});
+test('validate-models: FACTORY_MODELS_TIMEOUT_MS invalido => se usa el defecto (300 s), no 0 ni NaN', () => {
+  const { d, bin } = liveProject({ sleep: 1 });
+  for (const v of ['abc', '-5', '0', '']) assert.equal(vmLive(d, bin, { FACTORY_MODELS_TIMEOUT_MS: v, FACTORY_MODELS_CACHE_TTL_S: '0' }).status, 0, `valor "${v}"`);
+});
+test('validate-models: cache activa => dos ejecuciones llaman a opencode una vez; TTL=0 => dos', () => {
+  const a = liveProject();
+  assert.equal(vmLive(a.d, a.bin).status, 0); assert.equal(vmLive(a.d, a.bin).status, 0); assert.equal(calls(a.d), 1);
+  const b = liveProject();
+  assert.equal(vmLive(b.d, b.bin, { FACTORY_MODELS_CACHE_TTL_S: '0' }).status, 0); assert.equal(vmLive(b.d, b.bin, { FACTORY_MODELS_CACHE_TTL_S: '0' }).status, 0); assert.equal(calls(b.d), 2);
+  assert.deepEqual(fs.readdirSync(path.join(b.d, 'tmpdir')), [], 'con TTL=0 no se escribe cache');
+});
+test('validate-models: cache caducada vuelve a llamar; el archivo de cache es 600', () => {
+  const { d, bin } = liveProject();
+  vmLive(d, bin);
+  const [f] = fs.readdirSync(path.join(d, 'tmpdir')); const p = path.join(d, 'tmpdir', f);
+  assert.equal(fs.statSync(p).mode & 0o777, 0o600);
+  const old = new Date(Date.now() - 3600 * 1000); fs.utimesSync(p, old, old);
+  vmLive(d, bin); assert.equal(calls(d), 2);
+});
+test('validate-models: una cache vigente pero vacia o corrupta se ignora', () => {
+  const { d, bin } = liveProject();
+  vmLive(d, bin);
+  const [f] = fs.readdirSync(path.join(d, 'tmpdir')); fs.writeFileSync(path.join(d, 'tmpdir', f), 'basura\n');
+  assert.equal(vmLive(d, bin).status, 0); assert.equal(calls(d), 2);
+});
+test('validate-models: una salida vacia o invalida nunca se cachea', () => {
+  const { d, bin } = liveProject({ out: 'basura\n' });
+  vmLive(d, bin); vmLive(d, bin);
+  assert.equal(calls(d), 2); assert.deepEqual(fs.readdirSync(path.join(d, 'tmpdir')), []);
+});
 test('los agentes reales: cada uno declara un modelo', () => {
   const m = agentModels(path.join(REPO, '.opencode/agent'));
   assert.ok(Object.keys(m).length >= 11); for (const [n, id] of Object.entries(m)) assert.match(id || '', /^[\w.-]+\/[\w.:+-]+$/, n);
