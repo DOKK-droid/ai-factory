@@ -75,7 +75,7 @@ El video muestra un "camino rápido" donde el código va directo a main. En esta
 ## ADR-004: Skills en una sola copia y modelo del approver provisional
 
 Fecha: 2026-10-30
-Estado: Parcial (el modelo del approver quedó reemplazado por ADR-010; la limpieza de skills duplicadas NO se ejecutó: `.agents/skills/` aún contiene `code-review`, `receiving-code-review` y `test-driven-development`; `PATCH_INSTRUCCIONES.md` y `patch-refactor/` se borraron el 2026-11-04 y la limpieza de skills sigue pendiente)
+Estado: Reemplazado por ADR-011 (la premisa de que `03-SKILLS/` era la ruta que carga OpenCode era falsa; el modelo del approver ya lo reemplazó ADR-010)
 
 ### Contexto
 `code-review`, `receiving-code-review` y `test-driven-development` existían dos veces: versión completa en `.agents/skills/` y versión resumida en `03-SKILLS/`. Dos copias con el mismo nombre confunden qué se carga y gastan contexto. Además, la configuración de la factory movió `approver` y `human-gate` a `sonnet` (deepseek) para decorrelacionar, pero `reviewer-code` usa el mismo modelo y el A/B que lo justificaría (paso 7 de PATCH_INSTRUCCIONES) aún no se ha ejecutado.
@@ -344,3 +344,25 @@ Criterio: quien construye (builder), quien aprueba (approver) y quien audita seg
 - spec-writer, tres reviewers y memory-curator comparten modelo (GLM): sus errores pueden estar correlacionados. Si baja la señal, subir de tier al menos un reviewer.
 - Cambiar un modelo es editar `factory/config.json` (archivo protegido, lo cambia el humano) y ejecutar `validate-models.mjs`.
 
+
+## ADR-011: Skills de terceros en `.agents/skills/` y skills propias en `03-SKILLS/` (reemplaza a ADR-004)
+
+Fecha: 2026-11-05
+Estado: Aprobado (decisión del humano en la sesión del 2026-11-05; se aprueba al fusionar el PR que la introduce)
+
+### Contexto
+ADR-004 asumió que `03-SKILLS/` era el directorio que carga OpenCode y que `.agents/skills/` no se usaba, por lo que mandó borrar las copias de `.agents/skills/`. `opencode debug skill` (ejecutado el 2026-11-05, 22 skills) lo desmiente: `code-review`, `receiving-code-review`, `test-driven-development` y `differential-review` se cargan desde `.agents/skills/<nombre>/SKILL.md`. Los agentes las invocan por nombre (por ejemplo `builder.md` cita `test-driven-development` y `receiving-code-review`). `skills-lock.json` las fija con su fuente y su hash (getsentry/skills, trailofbits/skills, obra/superpowers). Las versiones de `.agents/skills/` son las completas (102, 205 y 330 líneas); las de `03-SKILLS/` eran resúmenes de 61 a 72 líneas que ningún agente, script ni test leía por ruta. `03-SKILLS/` guarda además skills propias de la fábrica (`factory-protocol`, `orient`, `approver`, `human-gate`, `memory-curator`, `spec-writer`) que los agentes leen por ruta y que no tienen equivalente de terceros.
+
+### Decisión
+- `.agents/skills/` queda intacta: skills de terceros fijadas por `skills-lock.json` y cargadas por OpenCode.
+- Se borran de `03-SKILLS/` los tres resúmenes duplicados (`code-review`, `receiving-code-review`, `test-driven-development`). Quedan las skills propias de la fábrica.
+- Regla: una skill vive en un solo sitio. De terceros: `.agents/skills/` con su entrada en `skills-lock.json`. Propia de la fábrica: `03-SKILLS/`.
+- ADR-004 pasa a `Reemplazado por ADR-011`.
+
+### Alternativas consideradas
+- Cumplir ADR-004 (dejar solo `03-SKILLS/`): Rechazado. OpenCode no carga esa ruta; los reviewers y el builder perderían las versiones completas en la herramienta `skill` y `skills-lock.json` quedaría desalineado.
+- Mantener las dos copias: Rechazado. Dos copias con el mismo nombre confunden qué se carga y gastan contexto.
+
+### Consecuencias
+- Antes de borrar se repitió la búsqueda de las tres rutas (sin referencias) y se confirmó que `opencode debug skill` sigue listando las cuatro skills de terceros desde `.agents/skills/`.
+- `install-into.sh` copia `03-SKILLS/` pero no `.agents/skills/`: un proyecto nuevo no recibe las skills de terceros hasta que se añada esa copia (con sus entradas de `skills-lock.json`) o se instalen con `npx @ericrisco/rsc`. Queda pendiente.
