@@ -6,7 +6,7 @@
  * Uso: node validate-models.mjs [--agents a,b,c] [--config]
  *   sin --agents: todos los .opencode/agent/*.md ; --config: ademas los tiers de factory/config.json
  * Variables: OPENCODE_BIN (por defecto "opencode"), FACTORY_MODELS_FILE (lista de modelos en un archivo; para pruebas),
- *   FACTORY_MODELS_TIMEOUT_MS (espera maxima de `opencode models`; por defecto 300000),
+ *   FACTORY_MODELS_TIMEOUT_MS (espera maxima de `opencode models`; por defecto 1800000 = 30 min),
  *   FACTORY_MODELS_CACHE_TTL_S (vigencia de la cache de la lista; por defecto 1800, 0 = sin cache)
  * Cache: ${TMPDIR:-/tmp}/factory-models-cache-<uid>-<hash del binario>.txt, permisos 600; solo guarda salidas que pasaron parseModelsOutput.
  * Salida: 0 todos existen · 1 faltan IDs · 3 no se pudo obtener la lista (se trata como fallo: no se asume nada)
@@ -17,7 +17,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
-const DEFAULT_TIMEOUT_MS = 300000;
+export const DEFAULT_TIMEOUT_MS = 1800000;
 const DEFAULT_CACHE_TTL_S = 1800;
 
 export function parseModelsOutput(text) {
@@ -84,7 +84,9 @@ function availableModels() {
   const file = cacheFile(bin);
   const cached = readCache(file, ttlS);
   if (cached) return { ids: cached, error: null, cached: true };
+  const t0 = Date.now();
   const r = spawnSync(bin, ['models'], { encoding: 'utf8', timeout: timeoutMs });
+  const elapsedMs = Date.now() - t0;
   if (r.error && (r.error.code === 'ETIMEDOUT' || r.signal)) {
     return { ids: null, error: `\`opencode models\` no respondio en ${Math.round(timeoutMs / 1000)} s (timeout). Sube el limite con FACTORY_MODELS_TIMEOUT_MS=<milisegundos>.` };
   }
@@ -93,7 +95,7 @@ function availableModels() {
   const ids = parseModelsOutput(r.stdout);
   if (ids.size === 0) return { ids: null, error: `\`${bin} models\` devolvio una salida vacia o con formato inesperado.` };
   if (ttlS > 0) writeCache(file, r.stdout);
-  return { ids, error: null };
+  return { ids, error: null, elapsedMs };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -106,8 +108,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const c = JSON.parse(fs.readFileSync('factory/config.json', 'utf8'));
     for (const [t, id] of Object.entries(c.tiers || {})) wanted.push([`tier ${t}`, id]);
   }
-  const { ids: have, error, cached } = availableModels();
+  const { ids: have, error, cached, elapsedMs } = availableModels();
   if (!have || have.size === 0) { console.error(`ERROR: no pude obtener la lista de modelos: ${error || 'la lista esta vacia'} No se asume que los modelos existan.`); process.exit(3); }
+  if (elapsedMs !== undefined) console.error(`opencode models respondio en ${(elapsedMs / 1000).toFixed(1)} s`);
   let bad = 0;
   for (const [origin, id] of wanted) {
     if (!id) { console.error(`FALTA: ${origin} no declara model:`); bad++; }
