@@ -56,19 +56,39 @@ Anota la fecha de caducidad; si sospechas una filtración: Settings → Develope
 
 ## 3. Proyecto nuevo, paso a paso
 
-1. **Crea el repo.** Más fácil: marca `ai-factory` como plantilla (Settings → General → *Template repository*) y usa *Use this template*: heredas guard, hooks, permisos y tests. Si no, copia `opencode.json`, `.opencode/`, `factory/`, `.hooks/`, `01-TOOLS/`.
-2. **Primer commit a `main`** con el código base, el CI (`factory/templates/project-ci.yml` → `.github/workflows/ci.yml`; el job se llama `ci`) y, si usarás code owners, `.github/CODEOWNERS`. Se hace **antes** de proteger `main`.
-3. **Protege `main`:**
+El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git existente y le deja un **Brain limpio** (sin las decisiones de la fábrica). Cada proyecto tiene **su propio `02-DOCS/`** y su propio check de CI.
+
+1. **Prepara el repo destino:** un repo git con al menos un commit en `main` y el árbol limpio. Si no tiene `package.json`, el instalador crea uno mínimo.
+2. **Instala (primero dry-run, que no escribe nada):**
+   ```bash
+   bash factory/scripts/install-into.sh /ruta/al/proyecto                  # dry-run: lista qué copia, crea y qué choca
+   bash factory/scripts/install-into.sh /ruta/al/proyecto --apply --name mi-proyecto
+   bash factory/scripts/install-into.sh /ruta/al/proyecto --check          # 0 = la maquinaria coincide con la fuente
+   ```
+   Si un archivo del destino ya existe y difiere, el instalador lista los conflictos y se detiene (`--force` solo sobrescribe maquinaria; nunca el Brain, `project.json`, `package.json` ni `AGENTS.md`). No instala el harness RSC (eso es `npx @ericrisco/rsc`, aparte) ni toca `/etc/opencode`.
+3. **Escribe el contexto:** rellena `02-DOCS/wiki/context.md` (qué es el proyecto, actores, stack, cómo se prueba, restricciones) y los marcadores `RELLENAR` de `02-DOCS/wiki/sdd/constitution.md`. El spec-writer lee `context.md` antes de cada spec; `--check` avisa mientras queden marcadores. Si el destino ya tenía `AGENTS.md`, las reglas de la fábrica quedan en `AGENTS.factory.md`: fusiónalas a mano.
+4. **Primer commit a `main`** con la instalación y el CI (`.github/workflows/ci.yml`, que el instalador crea desde `factory/templates/project-ci.yml`; el job se llama `ci`). Si usarás code owners, añade `.github/CODEOWNERS`. Se hace **antes** de proteger `main`.
+5. **Protege `main`:**
    ```bash
    bash factory/scripts/onboard-project.sh OWNER/REPO --check-name ci            # dry-run: revisa
    bash factory/scripts/onboard-project.sh OWNER/REPO --check-name ci --apply
    ```
    (o importa `factory/templates/ruleset-main.json` en Settings → Rules → Rulesets → New ruleset → *Import a ruleset*).
-4. **Ajustes manuales:** Settings → Actions → General → *Fork pull request workflows* = require approval for all outside collaborators; Settings → Security and quality → **Advanced Security**: Secret Protection (y Push protection) activados; Code Security → CodeQL en configuración por defecto.
-5. **Acceso del token:** edita el token del agente y añade el repo (o crea uno nuevo solo para él).
-6. **Local:** `npm run hooks:install`, `npm test`, `factory-agent`.
-7. **Prueba de humo:** un job trivial; comprueba que el PR sale en borrador desde `factory/<job-id>`, que el check `ci` corre y que **tú** haces el merge.
-8. Cada proyecto tiene **su propio `02-DOCS/`** (Brain) y su propio check de CI. No exijas `behavior-tests` fuera de `ai-factory`.
+6. **Config managed (opcional, recomendada):** `bash factory/scripts/install-managed.sh` (dry-run; luego `--apply`, pide sudo).
+7. **Ajustes manuales:** Settings → Actions → General → *Fork pull request workflows* = require approval for all outside collaborators; Settings → Security and quality → **Advanced Security**: Secret Protection (y Push protection) activados; Code Security → CodeQL en configuración por defecto.
+8. **Acceso del token:** edita el token del agente y añade el repo (o crea uno nuevo solo para él).
+9. **Local:** `npm run hooks:install`, `npm test`, `./factory-agent`.
+10. **Prueba de humo:** un job trivial con `/factory "<tarea pequeña>"`; comprueba que el PR sale en borrador desde `factory/<job-id>`, que el check `ci` corre y que **tú** haces el merge. No exijas `behavior-tests` fuera de `ai-factory`.
+
+### Qué instala (la tabla que el test de consistencia compara con el instalador)
+
+| Tipo | Ruta |
+|---|---|
+| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `factory-agent`, `factory-maint` |
+| mezcla o adapta | `package.json` (solo añade los scripts `factory:*` y `hooks:install`), `.gitignore` (bloque de la fábrica), `AGENTS.md` (sin el bloque del harness RSC; si ya existe, queda `AGENTS.factory.md`) |
+| crea si falta | `.github/workflows/ci.yml`, `factory/project.json`, `factory/backlog.md`, `02-DOCS/wiki/index.md`, `02-DOCS/wiki/context.md`, `02-DOCS/wiki/sdd/constitution.md`, `02-DOCS/wiki/sdd/decisions.md`, `02-DOCS/wiki/sdd/methodology.md`, `02-DOCS/wiki/sdd/spec-template.md`, `02-DOCS/wiki/sdd/job-page-template.md` |
+
+No se copian: `tests/`, los ADR y la constitución de la fábrica, `factory/jobs/*`, `docs/PATCH*`, `.rsc*`, `.agents/`, `skills-lock.json` ni `01-TOOLS/_TEMPLATE`. `methodology.md` se copia tal cual (incluye requisitos de la propia fábrica como ejemplo: genericizarlo queda pendiente).
 
 ## 4. Quién decide si una máquina sigue sola o interviene un humano
 
