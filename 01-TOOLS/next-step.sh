@@ -256,9 +256,9 @@ fi
 # ---------- 8. decision del approver ----------
 STATE=8
 DEC="${JOB_DIR}/decision.md"
-if [ ! -f "$DEC" ]; then delegate approver "consolidar los 4 reviews de la ronda ${CUR} en APPROVE, CHANGES o ESCALATE (linea 1)" "factory/jobs/${JOB_ID}/decision.md" "falta decision.md"; fi
+if [ ! -f "$DEC" ]; then delegate approver "consolidar los 4 reviews de la ronda ${CUR} en APPROVE, CHANGES o ESCALATE (linea 1); para ver los commits usa git -C factory/worktrees/${JOB_ID} log o diff" "factory/jobs/${JOB_ID}/decision.md" "falta decision.md"; fi
 if ! [ "$DEC" -nt "${RDIR}/.commit" ]; then
-  delegate approver "consolidar los 4 reviews de la ronda ${CUR} (decision.md es anterior a esos reviews)" "factory/jobs/${JOB_ID}/decision.md" "decision.md obsoleta"
+  delegate approver "consolidar los 4 reviews de la ronda ${CUR} (decision.md es anterior a esos reviews); para ver los commits usa git -C factory/worktrees/${JOB_ID} log o diff" "factory/jobs/${JOB_ID}/decision.md" "decision.md obsoleta"
 fi
 DECISION="$(line1 "$DEC")"
 

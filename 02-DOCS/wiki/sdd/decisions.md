@@ -75,7 +75,7 @@ El video muestra un "camino rápido" donde el código va directo a main. En esta
 ## ADR-004: Skills en una sola copia y modelo del approver provisional
 
 Fecha: 2026-10-30
-Estado: Parcial (el modelo del approver quedó reemplazado por ADR-010; la limpieza de skills duplicadas NO se ejecutó: `.agents/skills/` aún contiene `code-review`, `receiving-code-review` y `test-driven-development`, y `patch-refactor/` sigue en el repo)
+Estado: Parcial (el modelo del approver quedó reemplazado por ADR-010; la limpieza de skills duplicadas NO se ejecutó: `.agents/skills/` aún contiene `code-review`, `receiving-code-review` y `test-driven-development`; `PATCH_INSTRUCCIONES.md` y `patch-refactor/` se borraron el 2026-11-04 y la limpieza de skills sigue pendiente)
 
 ### Contexto
 `code-review`, `receiving-code-review` y `test-driven-development` existían dos veces: versión completa en `.agents/skills/` y versión resumida en `03-SKILLS/`. Dos copias con el mismo nombre confunden qué se carga y gastan contexto. Además, la configuración de la factory movió `approver` y `human-gate` a `sonnet` (deepseek) para decorrelacionar, pero `reviewer-code` usa el mismo modelo y el A/B que lo justificaría (paso 7 de PATCH_INSTRUCCIONES) aún no se ha ejecutado.

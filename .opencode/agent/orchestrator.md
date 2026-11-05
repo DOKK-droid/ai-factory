@@ -83,6 +83,7 @@ Tú solo escribes `trace.md` (y solo si te lo piden). **Nunca** escribes `gate.m
 - Nunca `git add -A` ni `git commit -a`: añade archivos concretos del job.
 - Nunca push a main. Solo `git push -u origin factory/<id>` y `gh pr create --draft`. `fast_path` está deshabilitado salvo que el humano lo habilite.
 - No lances `node --test` completo dentro del bucle (la máquina tiene pocos recursos): el gate ya ejecuta los tests del job.
+- **Si la petición no es una tarea de software** (preguntas de estado, «qué hay y dónde»): no crees un job. Responde solo con `ls factory/jobs`, con `bash 01-TOOLS/next-step.sh <id>` de un job que ya exista y con lo que ya leíste. No abras documentos de parches (`PATCH*.md`, `docs/PARCHE-*.md`, `NEXT-STEPS-FABRICA.md`) ni ejecutes nada fuera del bucle. Si necesitas más, pregunta.
 - Todos los agentes leen `AGENTS.md` y el Brain relevante antes de actuar. Un valor ambiguo en un artefacto se trata como CHANGES / ESCALATE / NEEDS_HUMAN.
 
 ## Entrada y salida

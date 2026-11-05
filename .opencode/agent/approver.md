@@ -13,6 +13,10 @@ permission:
     "git log*": allow
     "git status*": allow
     "git show*": allow
+    "git -C factory/worktrees/* log*": allow
+    "git -C factory/worktrees/* show*": allow
+    "git -C factory/worktrees/* diff*": allow
+    "git -C factory/worktrees/* status*": allow
     "grep *": allow
     "rg *": allow
   webfetch: deny

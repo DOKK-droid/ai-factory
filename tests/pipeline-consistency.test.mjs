@@ -32,6 +32,30 @@ test('todos los patrones de edit empiezan por * (rutas absolutas de la worktree)
   for (const a of AGENTS) for (const [p] of perms(a).edit) assert.ok(p.startsWith('*'), `${a}: "${p}"`);
 });
 
+test('approver y human-gate leen el historial de la worktree con git -C, acotado a factory/worktrees/', () => {
+  for (const a of ['approver', 'human-gate']) {
+    const rules = perms(a).bash;
+    for (const c of ['log', 'show', 'diff', 'status']) {
+      assert.equal(decide(rules, `git -C factory/worktrees/job-1 ${c} --stat`), 'allow', `${a}: git -C factory/worktrees/<id> ${c}`);
+    }
+    for (const v of ['git -C . log', 'git -C /tmp/otro log', 'git -C factory/worktrees/job-1 push origin main', 'git -C factory/worktrees/job-1 commit -m x', 'git push origin main']) {
+      assert.equal(decide(rules, v, 'deny'), 'deny', `${a}: ${v} no debe estar permitido`);
+    }
+    assert.ok(!rules.some(([p, act]) => act === 'allow' && /^git -C \*/.test(p)), `${a}: nada de "git -C *" generico`);
+  }
+});
+
+test('orchestrator: regla para peticiones que no son un job (solo texto; no prueba el comportamiento del modelo)', () => {
+  const txt = fs.readFileSync(path.join(ROOT, '.opencode/agent/orchestrator.md'), 'utf8');
+  assert.match(txt, /Si la petición no es una tarea de software/);
+  for (const f of ['PATCH', 'PARCHE', 'NEXT-STEPS-FABRICA']) assert.ok(txt.includes(f), `la regla debe nombrar ${f}`);
+  assert.match(txt, /no crees un job/);
+  // sigue sin poder escribir fuera de trace.md
+  const edit = perms('orchestrator').edit;
+  for (const v of ['factory/jobs/j/trace.md']) assert.equal(decide(edit, v), 'allow');
+  for (const v of ['factory/jobs/j/pr.url', 'factory/jobs/j/gate.md', 'factory/jobs/j/decision.md', 'factory/jobs/j/human.md', 'docs/PATCH-5.md', '01-TOOLS/next-step.sh']) assert.equal(decide(edit, v), 'deny', v);
+});
+
 test('builder: cada PROTECTED_PATH esta denegado (relativa y absoluta)', () => {
   const rules = perms('builder').edit;
   for (const p of PROTECTED_PATHS) {

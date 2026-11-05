@@ -116,6 +116,11 @@ test('8: reviews vigentes sin decision.md => DELEGATE @approver; decision anteri
   const f = fx().upTo('reviewed'); expectDelegate(f.ns(), 'approver', 8);
   const g = fx().upTo('gated'); g.decision('APPROVE'); g.reviews(1); expectDelegate(g.ns(), 'approver', 8);
 });
+test('8: el DELEGATE del approver (3 campos) dice como leer el historial de la worktree', () => {
+  for (const f of [fx().upTo('reviewed'), (() => { const g = fx().upTo('gated'); g.decision('APPROVE'); g.reviews(1); return g; })()]) {
+    const r = f.ns(); expectDelegate(r, 'approver', 8); assert.match(r.value, /git -C factory\/worktrees\/job-1 log/);
+  }
+});
 test('9: CHANGES => DELEGATE @builder; en la ultima ronda => STOP MAX_ROUNDS', () => {
   const f = fx().upTo('reviewed'); f.decision('CHANGES'); expectDelegate(f.ns(), 'builder', 9);
   const g = fx({ project: { max_rounds: 1 } }).upTo('reviewed'); g.decision('CHANGES'); expectStop(g.ns(), 'MAX_ROUNDS');
