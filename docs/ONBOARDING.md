@@ -63,7 +63,8 @@ El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git
    ```bash
    bash factory/scripts/install-into.sh /ruta/al/proyecto                  # dry-run: lista qué copia, crea y qué choca
    bash factory/scripts/install-into.sh /ruta/al/proyecto --apply --name mi-proyecto
-   bash factory/scripts/install-into.sh /ruta/al/proyecto --check          # 0 = la maquinaria coincide con la fuente
+   bash factory/scripts/install-into.sh /ruta/al/proyecto --check          # 0 = la maquinaria y las skills coinciden con la fuente
+   # opcional: --engine opencode (por defecto; el único soportado hoy)
    ```
    Si un archivo del destino ya existe y difiere, el instalador lista los conflictos y se detiene (`--force` solo sobrescribe maquinaria; nunca el Brain, `project.json`, `package.json` ni `AGENTS.md`). No instala el harness RSC (eso es `npx @ericrisco/rsc`, aparte) ni toca `/etc/opencode`.
 3. **Escribe el contexto:** rellena `02-DOCS/wiki/context.md` (qué es el proyecto, actores, stack, cómo se prueba, restricciones) y los marcadores `RELLENAR` de `02-DOCS/wiki/sdd/constitution.md`. El spec-writer lee `context.md` antes de cada spec; `--check` avisa mientras queden marcadores. Si el destino ya tenía `AGENTS.md`, las reglas de la fábrica quedan en `AGENTS.factory.md`: fusiónalas a mano.
@@ -84,11 +85,13 @@ El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git
 
 | Tipo | Ruta |
 |---|---|
-| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `factory-agent`, `factory-maint` |
-| mezcla o adapta | `package.json` (solo añade los scripts `factory:*` y `hooks:install`), `.gitignore` (bloque de la fábrica), `AGENTS.md` (sin el bloque del harness RSC; si ya existe, queda `AGENTS.factory.md`) |
+| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `.agents/skills` (skills de terceros, según `--engine`), `factory-agent`, `factory-maint` |
+| mezcla o adapta | `package.json` (solo añade los scripts `factory:*` y `hooks:install`), `.gitignore` (bloque de la fábrica), `AGENTS.md` (sin el bloque del harness RSC; si ya existe, queda `AGENTS.factory.md`), `skills-lock.json` (añade las skills de terceros que falten; nunca pisa una entrada del destino) |
 | crea si falta | `.github/workflows/ci.yml`, `factory/project.json`, `factory/backlog.md`, `02-DOCS/wiki/index.md`, `02-DOCS/wiki/context.md`, `02-DOCS/wiki/sdd/constitution.md`, `02-DOCS/wiki/sdd/decisions.md`, `02-DOCS/wiki/sdd/methodology.md`, `02-DOCS/wiki/sdd/spec-template.md`, `02-DOCS/wiki/sdd/job-page-template.md` |
 
-No se copian: `tests/`, los ADR y la constitución de la fábrica, `factory/jobs/*`, `docs/PATCH*`, `.rsc*`, `.agents/`, `skills-lock.json` ni `01-TOOLS/_TEMPLATE`. `methodology.md` se copia tal cual (incluye requisitos de la propia fábrica como ejemplo: genericizarlo queda pendiente).
+No se copian: `tests/`, los ADR y la constitución de la fábrica, `factory/jobs/*`, `docs/PATCH*`, `.rsc*`, `02-DOCS/wiki/sdd/factory-requirements.md` (los RF-F son de la fábrica) ni `01-TOOLS/_TEMPLATE`. `methodology.md` viaja genérico (el método vale para cualquier proyecto); `--check` falla si el destino acaba con `factory-requirements.md` o con algún `RF-F` en su Brain o su `AGENTS`.
+
+**Motor de IA (`--engine`).** Decide dónde van las skills de terceros. Hoy solo existe `opencode` (el valor por defecto): las deja en `.agents/skills/`, que es lo que OpenCode carga (`opencode debug skill`, ADR-011). Un motor distinto se rechaza con exit 2 y sin escribir nada: su ruta se añade a `engine_skills_dir` cuando se compruebe en su documentación, no antes. Las skills propias de la fábrica (`03-SKILLS/`) se leen por ruta y viajan siempre.
 
 ## 4. Quién decide si una máquina sigue sola o interviene un humano
 

@@ -6,7 +6,8 @@
 #       bash factory/scripts/install-into.sh <ruta-destino> [--name <nombre>] --apply     # instala
 #       bash factory/scripts/install-into.sh <ruta-destino> --check                       # compara lo instalado con la fuente
 #       bash factory/scripts/install-into.sh --list                                       # manifiesto (tipo<TAB>ruta)
-# Opciones: --force  instala aunque el arbol del destino tenga cambios y sobrescribe maquinaria que difiere
+# Opciones: --engine <motor>  motor de IA del destino; decide donde van las skills de terceros. Hoy solo `opencode` (por defecto).
+#           --force  instala aunque el arbol del destino tenga cambios y sobrescribe maquinaria que difiere
 #                    (nunca sobrescribe el Brain, project.json, package.json ni AGENTS.md del destino).
 # Requisitos del destino: existe, es la raiz de un repo git, arbol limpio (o --force); no es esta fabrica.
 # No toca /etc/opencode, no instala hooks de git, no crea reglas de GitHub y no instala el harness RSC (eso lo hace `npx @ericrisco/rsc`).
@@ -18,7 +19,8 @@ SRC="$(cd "${HERE}/../.." && pwd -P)"
 # ---------------------------------------------------------------------------------------------------------
 # MANIFIESTO — unico sitio donde se decide que se copia. Rutas relativas a la raiz de la fabrica; solo se
 # copian archivos SEGUIDOS por git (el ruido sin seguir, p. ej. .opencode/rsc o .worktrees, nunca viaja).
-# `tests/`, los ADR y la constitucion de la fabrica, los jobs, docs/PATCH*, .rsc*, .agents/ y skills-lock.json no estan aqui a proposito.
+# `tests/`, los ADR y la constitucion de la fabrica, los jobs, docs/PATCH* y .rsc* no estan aqui a proposito.
+# Las skills de terceros (.agents/skills en OpenCode) dependen del motor: ver engine_skills_dir.
 # ---------------------------------------------------------------------------------------------------------
 COPY_ENTRIES=(
   opencode.json
@@ -35,9 +37,15 @@ COPY_ENTRIES=(
   factory-agent
   factory-maint
 )
+# Carpeta donde cada motor de IA carga las skills de terceros. Solo se anade un motor cuando su ruta esta VERIFICADA
+# en su documentacion o con su CLI (OpenCode: `opencode debug skill` las lista desde .agents/skills, ver ADR-011).
+ENGINE_DEFAULT=opencode
+ENGINES_OK="opencode"
+engine_skills_dir() { case "$1" in opencode) echo ".agents/skills" ;; *) return 1 ;; esac; }
+ENGINE="$ENGINE_DEFAULT"; SKILLS_DIR="$(engine_skills_dir "$ENGINE")"
 # Dentro de las entradas anteriores: no se copia (regex sobre la ruta relativa).
 COPY_EXCLUDE='^(01-TOOLS/_TEMPLATE/|01-TOOLS/\.gitignore$)'
-MERGE_ENTRIES=(package.json .gitignore AGENTS.md)   # se mezclan o adaptan, nunca se sobrescriben
+MERGE_ENTRIES=(package.json .gitignore AGENTS.md skills-lock.json)   # se mezclan o adaptan, nunca se sobrescriben
 CI_ENTRY=.github/workflows/ci.yml                   # sale de factory/templates/project-ci.yml
 # Se crean si faltan y NO se sobrescriben jamas (son del proyecto destino).
 CREATE_ENTRIES=(
@@ -55,7 +63,7 @@ GITIGNORE_MARK='# --- AI Factory (install-into.sh) ---'
 PKG_SCRIPTS_RE='^(factory:|hooks:install$)'
 
 if [ "${1:-}" = "--list" ]; then
-  for e in "${COPY_ENTRIES[@]}"; do printf 'copy\t%s\n' "$e"; done
+  for e in "${COPY_ENTRIES[@]}" "$SKILLS_DIR"; do printf 'copy\t%s\n' "$e"; done
   for e in "${MERGE_ENTRIES[@]}"; do printf 'merge\t%s\n' "$e"; done
   printf 'create\t%s\n' "$CI_ENTRY"
   for e in "${CREATE_ENTRIES[@]}"; do printf 'create\t%s\n' "$e"; done
@@ -66,17 +74,19 @@ usage() { sed -n '2,12p' "$0"; exit "${1:-2}"; }
 [ $# -ge 1 ] || usage
 case "$1" in -h|--help) usage 0 ;; esac
 DEST_ARG="$1"; shift
-APPLY=0; CHECK=0; FORCE=0; NAME=""
+APPLY=0; CHECK=0; FORCE=0; NAME=""; ENGINE_GIVEN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply) APPLY=1; shift ;;
     --check) CHECK=1; shift ;;
     --force) FORCE=1; shift ;;
     --name) NAME="${2:?falta valor}"; shift 2 ;;
+    --engine) ENGINE="${2:?falta valor}"; ENGINE_GIVEN=1; shift 2 ;;
     -h|--help) usage 0 ;;
     *) echo "opcion desconocida: $1" >&2; usage ;;
   esac
 done
+SKILLS_DIR="$(engine_skills_dir "$ENGINE")" || { echo "ERROR: --engine '${ENGINE}' no esta soportado (motores verificados: ${ENGINES_OK}). La ruta de skills de otro motor se anade a engine_skills_dir cuando se compruebe en su documentacion." >&2; exit 2; }
 [ "$CHECK" -eq 0 ] || [ "$APPLY" -eq 0 ] || { echo "ERROR: --check y --apply no se combinan" >&2; exit 2; }
 
 [ -d "$DEST_ARG" ] || { echo "ERROR: el destino no existe o no es una carpeta: ${DEST_ARG}" >&2; exit 1; }
@@ -98,7 +108,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 # ---- lista de archivos a copiar (seguidos por git, sin exclusiones) ----
 copy_files() {
   local e
-  for e in "${COPY_ENTRIES[@]}"; do git -C "$SRC" ls-files -- "$e"; done | grep -Ev "$COPY_EXCLUDE" | sort -u
+  for e in "${COPY_ENTRIES[@]}" "$SKILLS_DIR"; do git -C "$SRC" ls-files -- "$e"; done | grep -Ev "$COPY_EXCLUDE" | sort -u
 }
 
 # ---- generadores (stdout) ----
@@ -255,6 +265,30 @@ pkg_apply() {
     fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");' "${SRC}/package.json" "${DEST}/package.json" "$PKG_SCRIPTS_RE" "$NAME"
 }
 
+# ---- skills-lock.json: entradas de la fuente que faltan o difieren en el destino (nombre<TAB>missing|differs) ----
+lock_missing() {
+  node -e '
+    const fs = require("fs");
+    const src = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).skills || {};
+    let have = {}; try { have = JSON.parse(fs.readFileSync(process.argv[2], "utf8")).skills || {}; } catch {}
+    for (const [k, v] of Object.entries(src)) {
+      if (!(k in have)) console.log(k + "\tmissing");
+      else if (have[k].computedHash !== v.computedHash) console.log(k + "\tdiffers");
+    }' "${SRC}/skills-lock.json" "${DEST}/skills-lock.json"
+}
+lock_apply() { # anade las entradas que faltan; nunca pisa una que el destino ya tenga
+  node -e '
+    const fs = require("fs"); const file = process.argv[2];
+    const src = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    let lock = null, raw = null;
+    if (fs.existsSync(file)) { raw = fs.readFileSync(file, "utf8"); try { lock = JSON.parse(raw); } catch { console.error("ERROR: skills-lock.json del destino no es JSON valido; no lo toco"); process.exit(1); } }
+    if (lock === null) lock = { version: src.version, skills: {} };
+    lock.skills = lock.skills || {};
+    let changed = raw === null;
+    for (const [k, v] of Object.entries(src.skills || {})) if (!(k in lock.skills)) { lock.skills[k] = v; changed = true; }
+    if (changed) fs.writeFileSync(file, JSON.stringify(lock, null, 2) + "\n");' "${SRC}/skills-lock.json" "${DEST}/skills-lock.json"
+}
+
 # =========================================================================================================
 #  --check
 # =========================================================================================================
@@ -277,6 +311,12 @@ if [ "$CHECK" -eq 1 ]; then
   if [ -f "${DEST}/package.json" ]; then
     miss="$(pkg_missing | cut -f1 | tr '\n' ' ')"; [ -z "$miss" ] || bad "package.json sin los scripts: ${miss}"
   else bad "package.json"; fi
+  # skills-lock.json: las skills de terceros instaladas deben estar fijadas con el mismo hash que la fuente
+  if [ -f "${DEST}/skills-lock.json" ]; then
+    while IFS=$'\t' read -r k st; do
+      case "$st" in missing) bad "skills-lock.json: falta la skill ${k}" ;; differs) bad "skills-lock.json: la skill ${k} tiene otro hash que la fuente" ;; esac
+    done < <(lock_missing)
+  else bad "skills-lock.json"; fi
   grep -qF "$GITIGNORE_MARK" "${DEST}/.gitignore" 2>/dev/null || bad ".gitignore sin el bloque de la fabrica (jobs, worktrees, logs)"
   for f in "${CREATE_ENTRIES[@]}"; do [ -f "${DEST}/${f}" ] || bad "${f}"; done
   # project.json valido
@@ -290,6 +330,10 @@ if [ "$CHECK" -eq 1 ]; then
       if grep -qxF -- "$h" "$DEC"; then bad "decisions.md contiene un ADR de la fabrica: ${h}"; fi
     done < <(grep -E '^## ADR-[0-9]+:' "${SRC}/02-DOCS/wiki/sdd/decisions.md")
   fi
+  # los requisitos de la propia fabrica (RF-F*) no viajan: ni la pagina ni sus identificadores
+  [ ! -e "${DEST}/02-DOCS/wiki/sdd/factory-requirements.md" ] || bad "02-DOCS/wiki/sdd/factory-requirements.md es de la fabrica; no debe estar en el proyecto"
+  LEAK="$(grep -rIlE 'RF-F[0-9]' "${DEST}/02-DOCS" "${DEST}/AGENTS.md" "${DEST}/AGENTS.factory.md" 2>/dev/null | sed "s#^${DEST}/##" | tr '\n' ' ' || true)"
+  [ -z "$LEAK" ] || bad "hay requisitos RF-F de la fabrica en: ${LEAK}"
   if grep -q 'ai-factory — Constitution' "${DEST}/02-DOCS/wiki/sdd/constitution.md" 2>/dev/null; then bad "constitution.md es la de la fabrica"; fi
   # contexto sin rellenar: aviso (no cambia el codigo de salida)
   if grep -q 'RELLENAR' "${DEST}/02-DOCS/wiki/context.md" 2>/dev/null; then warn "02-DOCS/wiki/context.md aun tiene marcadores RELLENAR: el primer spec nacera sin contexto"; fi
@@ -305,6 +349,10 @@ if [ "$FORCE" -eq 0 ] && [ -n "$(git -C "$DEST" status --porcelain)" ]; then
   echo "ERROR: el arbol de ${DEST} tiene cambios sin commitear. Commitea o descarta antes de instalar (o usa --force)." >&2
   git -C "$DEST" status --short | head -10 >&2
   exit 1
+fi
+
+if [ -f "${DEST}/skills-lock.json" ] && ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "${DEST}/skills-lock.json" 2>/dev/null; then
+  echo "ERROR: skills-lock.json del destino no es JSON valido; no instalo nada (arreglalo o borralo)." >&2; exit 1
 fi
 
 NEW=(); SAME=0; CONFLICT=()
@@ -325,6 +373,11 @@ if [ ! -e "${DEST}/AGENTS.md" ]; then AGENTS_TARGET=AGENTS.md; AGENTS_NOTE="se c
 elif cmp -s "${TMP}/agents" "${DEST}/AGENTS.md"; then AGENTS_TARGET=""; AGENTS_NOTE="AGENTS.md ya es igual"
 else AGENTS_TARGET=AGENTS.factory.md; AGENTS_NOTE="el destino ya tiene AGENTS.md: no se toca; las reglas de la fabrica van en AGENTS.factory.md (fusionalas a mano)"; fi
 
+LOCK_ADD="$(lock_missing | awk -F'\t' '$2=="missing"{print $1}' | tr '\n' ' ')"
+LOCK_DIFF="$(lock_missing | awk -F'\t' '$2=="differs"{print $1}' | tr '\n' ' ')"
+if [ ! -f "${DEST}/skills-lock.json" ]; then LOCK_NOTE="no existe: se crea con las skills de terceros (${LOCK_ADD})"
+else LOCK_NOTE="se anaden las skills que faltan: ${LOCK_ADD:-ninguna (ya estan)}"; fi
+[ -z "$LOCK_DIFF" ] || LOCK_NOTE="${LOCK_NOTE}; se respeta la entrada del destino que difiere: ${LOCK_DIFF}"
 MISSING_SCRIPTS="$(pkg_missing | cut -f1 | tr '\n' ' ')"
 if [ -f "${DEST}/package.json" ]; then PKG_NOTE="se anaden los scripts: ${MISSING_SCRIPTS:-ninguno (ya estan)}"
 else PKG_NOTE="no existe: se crea uno minimo con los scripts factory:* (y un test que falla hasta que definas el tuyo)"; fi
@@ -340,10 +393,12 @@ echo "== Mezcla / adaptacion =="
 echo "  package.json: ${PKG_NOTE}"
 echo "  .gitignore:   ${GI_NOTE}"
 echo "  AGENTS.md:    ${AGENTS_NOTE}"
+echo "  skills-lock.json: ${LOCK_NOTE}"
+echo "  skills de terceros (--engine ${ENGINE}): ${SKILLS_DIR}/"
 echo "== Se crea si falta (Brain limpio y config del proyecto; nunca se sobrescribe) =="
 for f in "${CREATE[@]}"; do echo "  CREAR   ${f}"; done
 for f in "${KEEP[@]}"; do echo "  CONSERVAR ${f} (ya existe)"; done
-echo "== No se copia: tests/, ADR y constitucion de la fabrica, jobs, docs de parches, .rsc*, .agents/, skills-lock.json, 01-TOOLS/_TEMPLATE =="
+echo "== No se copia: tests/, ADR y constitucion de la fabrica, jobs, docs de parches, .rsc*, 01-TOOLS/_TEMPLATE, 02-DOCS/wiki/sdd/factory-requirements.md =="
 
 if [ "${#CONFLICT[@]}" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
   echo
@@ -364,6 +419,7 @@ for f in "${CREATE[@]}"; do
 done
 [ -z "$AGENTS_TARGET" ] || cp -- "${TMP}/agents" "${DEST}/${AGENTS_TARGET}"
 pkg_apply
+lock_apply
 if ! grep -qF "$GITIGNORE_MARK" "${DEST}/.gitignore" 2>/dev/null; then
   { [ ! -s "${DEST}/.gitignore" ] || [ -z "$(tail -c1 "${DEST}/.gitignore")" ] || echo
     printf '%s\nfactory/jobs/*/\n!factory/jobs/.gitkeep\nfactory/worktrees/\nfactory/logs/\n' "$GITIGNORE_MARK"; } >> "${DEST}/.gitignore"

@@ -61,10 +61,10 @@ test('--apply: nada de la fabrica viaja (ADR, constitucion, jobs, tests, harness
   assert.doesNotMatch(read(d, '02-DOCS/wiki/sdd/decisions.md'), /^## ADR-/m, 'decisions.md debe estar vacio de ADR');
   assert.doesNotMatch(read(d, '02-DOCS/wiki/sdd/constitution.md'), /ai-factory — Constitution/);
   assert.doesNotMatch(read(d, '02-DOCS/wiki/sdd/constitution.md'), /AI Software Factory/);
-  assert.deepEqual(all.filter((f) => /^(tests\/|\.rsc|\.agents\/|\.opencode\/rsc|\.opencode\/agents\/|\.opencode\/commands\/|\.opencode\/node_modules)/.test(f)), []);
+  assert.deepEqual(all.filter((f) => /^(tests\/|\.rsc|\.agents\/(?!skills\/)|\.opencode\/rsc|\.opencode\/agents\/|\.opencode\/commands\/|\.opencode\/node_modules)/.test(f)), []);
   assert.deepEqual(all.filter((f) => /^\.opencode\/plugins\/rsc-/.test(f)), []);
   assert.deepEqual(all.filter((f) => /^factory\/jobs\/./.test(f) && f !== 'factory/jobs/.gitkeep'), []);
-  assert.deepEqual(all.filter((f) => /PATCH|PARCHE|PLAN_|skills-lock|01-TOOLS\/_TEMPLATE|02-DOCS\/wiki\/harness|NEXT-STEPS|\.patch$/.test(f)), []);
+  assert.deepEqual(all.filter((f) => /PATCH|PARCHE|PLAN_|01-TOOLS\/_TEMPLATE|02-DOCS\/wiki\/harness|NEXT-STEPS|\.patch$/.test(f)), []);
   assert.doesNotMatch(read(d, 'AGENTS.md'), /rsc-suggest/);
   assert.match(read(d, 'AGENTS.md'), /Pipeline/);
 });
@@ -152,4 +152,112 @@ test('integracion: en el destino instalado next-step.sh crea un job y responde (
   assert.equal(ns.status, 0, ns.stdout + ns.stderr); assert.match(ns.stdout, /^DELEGATE: @intake \| .+ \| factory\/jobs\//m); assert.match(ns.stdout, /READ: 02-DOCS\/wiki\/index\.md/);
   assert.ok(!ns.stdout.includes(REPO), 'no debe apuntar a la fabrica original');
   assert.equal(git(d, 'status', '--porcelain'), '', 'jobs y worktrees quedan ignorados por git');
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Skills de terceros (.agents/skills + skills-lock.json) y --engine
+// ---------------------------------------------------------------------------------------------------------
+const srcLock = () => JSON.parse(read(REPO, 'skills-lock.json'));
+const hasText = (b) => !b.includes(0);   // sin bytes nulos: texto
+const walkFiles = (d) => tree(d).filter((f) => hasText(fs.readFileSync(path.join(d, f))));
+
+test('--apply copia las skills de terceros a .agents/skills y fija las mismas entradas en skills-lock.json', () => {
+  const d = installed(); const lock = srcLock(); const names = Object.keys(lock.skills);
+  assert.ok(names.length >= 4);
+  for (const n of names) {
+    assert.ok(exists(d, `.agents/skills/${n}/SKILL.md`), `falta la skill ${n}`);
+    assert.equal(read(d, `.agents/skills/${n}/SKILL.md`), read(REPO, `.agents/skills/${n}/SKILL.md`));
+  }
+  assert.deepEqual(JSON.parse(read(d, 'skills-lock.json')).skills, lock.skills);
+  // todo lo que cuelga de .agents/skills en la fuente (seguido por git) llega al destino
+  const tracked = git(REPO, 'ls-files', '.agents/skills').split('\n').filter(Boolean);
+  for (const f of tracked) assert.ok(exists(d, f), `falta ${f}`);
+});
+
+test('--list y el dry-run declaran las skills de terceros y el motor', () => {
+  const rows = manifest();
+  assert.ok(rows.some(([k, p]) => k === 'copy' && p === '.agents/skills'));
+  assert.ok(rows.some(([k, p]) => k === 'merge' && p === 'skills-lock.json'));
+  const r = sh([dest()]); assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /skills de terceros \(--engine opencode\): \.agents\/skills\//); assert.match(r.stdout, /skills-lock\.json: no existe: se crea/);
+});
+
+test('--engine: opencode es el valor por defecto y explicito; otro motor se rechaza sin escribir nada', () => {
+  const d = dest(); const before = tree(d);
+  const r = sh([d, '--apply', '--engine', 'claude']);
+  assert.equal(r.status, 2); assert.match(r.stderr, /--engine 'claude' no esta soportado \(motores verificados: opencode\)/);
+  assert.deepEqual(tree(d), before);
+  const noValue = sh([d, '--engine']); assert.notEqual(noValue.status, 0); assert.deepEqual(tree(d), before);
+  const e = dest(); assert.equal(sh([e, '--apply', '--engine', 'opencode']).status, 0); assert.ok(exists(e, '.agents/skills/code-review/SKILL.md'));
+  assert.equal(sh([e, '--check', '--engine', 'opencode']).status, 0);
+  assert.equal(sh([e, '--check', '--engine', 'cursor']).status, 2);
+});
+
+test('un skills-lock.json del destino se respeta: se anaden las skills que faltan y no se pisa ninguna entrada propia', () => {
+  const own = { version: 1, skills: { 'mi-skill': { source: 'yo/skills', sourceType: 'github', skillPath: 'x/SKILL.md', computedHash: 'aaa' } } };
+  const d = dest({ 'README.md': 'x\n', 'skills-lock.json': JSON.stringify(own, null, 2) + '\n' });
+  const r = sh([d]); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /se anaden las skills que faltan: code-review/);
+  assert.equal(sh([d, '--apply']).status, 0);
+  const got = JSON.parse(read(d, 'skills-lock.json')).skills;
+  assert.deepEqual(got['mi-skill'], own.skills['mi-skill']);
+  for (const [k, v] of Object.entries(srcLock().skills)) assert.deepEqual(got[k], v);
+});
+
+test('una entrada del lock del destino con otro hash se conserva, se avisa y --check la senala', () => {
+  const lock = srcLock(); const first = Object.keys(lock.skills)[0];
+  const mine = { version: 1, skills: { [first]: { ...lock.skills[first], computedHash: 'distinto' } } };
+  const d = dest({ 'README.md': 'x\n', 'skills-lock.json': JSON.stringify(mine) + '\n' });
+  const r = sh([d]); assert.match(r.stdout, new RegExp('se respeta la entrada del destino que difiere: ' + first));
+  assert.equal(sh([d, '--apply']).status, 0);
+  assert.equal(JSON.parse(read(d, 'skills-lock.json')).skills[first].computedHash, 'distinto');
+  const c = sh([d, '--check']); assert.equal(c.status, 1); assert.match(c.stdout, new RegExp(`la skill ${first} tiene otro hash`));
+});
+
+test('un skills-lock.json invalido en el destino para la instalacion antes de escribir nada', () => {
+  const d = dest({ 'README.md': 'x\n', 'skills-lock.json': '{ esto no es json' });
+  const r = sh([d, '--apply']); assert.equal(r.status, 1); assert.match(r.stderr, /skills-lock\.json del destino no es JSON valido/);
+  assert.ok(!exists(d, '01-TOOLS') && !exists(d, '.agents'), 'no debe quedar una instalacion a medias');
+  assert.equal(read(d, 'skills-lock.json'), '{ esto no es json');
+});
+
+test('una skill que ya existe en el destino y difiere es un conflicto; --force solo sobrescribe esa maquinaria', () => {
+  const d = dest({ 'README.md': 'x\n', '.agents/skills/code-review/SKILL.md': 'mi version\n' });
+  let r = sh([d]); assert.equal(r.status, 1); assert.match(r.stderr, /\.agents\/skills\/code-review\/SKILL\.md/);
+  assert.equal(sh([d, '--apply']).status, 1); assert.equal(read(d, '.agents/skills/code-review/SKILL.md'), 'mi version\n');
+  r = sh([d, '--apply', '--force']); assert.equal(r.status, 0, r.stderr);
+  assert.equal(read(d, '.agents/skills/code-review/SKILL.md'), read(REPO, '.agents/skills/code-review/SKILL.md'));
+});
+
+test('--check detecta una skill borrada o alterada y una entrada que falta en el lock', () => {
+  const d = installed(); assert.equal(sh([d, '--check']).status, 0);
+  fs.appendFileSync(path.join(d, '.agents/skills/test-driven-development/SKILL.md'), 'cambio\n');
+  let r = sh([d, '--check']); assert.equal(r.status, 1); assert.match(r.stdout, /test-driven-development\/SKILL\.md \(no coincide/);
+  fs.copyFileSync(path.join(REPO, '.agents/skills/test-driven-development/SKILL.md'), path.join(d, '.agents/skills/test-driven-development/SKILL.md'));
+  fs.rmSync(path.join(d, '.agents/skills/receiving-code-review'), { recursive: true });
+  r = sh([d, '--check']); assert.equal(r.status, 1); assert.match(r.stdout, /receiving-code-review\/SKILL\.md \(no esta instalado\)/);
+  const lock = JSON.parse(read(d, 'skills-lock.json')); delete lock.skills['code-review']; fs.writeFileSync(path.join(d, 'skills-lock.json'), JSON.stringify(lock));
+  r = sh([d, '--check']); assert.match(r.stdout, /skills-lock\.json: falta la skill code-review/);
+  fs.rmSync(path.join(d, 'skills-lock.json')); r = sh([d, '--check']); assert.match(r.stdout, /FALTA\/DIFIERE: skills-lock\.json/);
+});
+
+test('el destino NO contiene los requisitos de la fabrica: ni factory-requirements.md ni ningun RF-F en ningun archivo', () => {
+  // la comprobacion tiene sentido solo si la fuente SI los tiene
+  assert.match(read(REPO, '02-DOCS/wiki/sdd/factory-requirements.md'), /RF-F1/);
+  const d = installed(); const files = walkFiles(d);
+  assert.deepEqual(files.filter((f) => /factory-requirements/.test(f)), [], 'factory-requirements.md no debe viajar');
+  // el propio instalador viaja y tiene que nombrar lo que prohibe (aserciones de --check): es el unico archivo exento
+  const leaks = files.filter((f) => f !== 'factory/scripts/install-into.sh').filter((f) => /RF-F\d|factory-requirements/.test(read(d, f)));
+  assert.deepEqual(leaks, [], `estos archivos del destino mencionan requisitos de la fabrica: ${leaks.join(', ')}`);
+  assert.equal(sh([d, '--check']).status, 0);
+});
+
+test('--check falla si el destino tiene factory-requirements.md o un RF-F de la fabrica en su Brain o AGENTS', () => {
+  let d = installed(); write(path.join(d, '02-DOCS/wiki/sdd/factory-requirements.md'), '# nada\n');
+  let r = sh([d, '--check']); assert.equal(r.status, 1); assert.match(r.stdout, /factory-requirements\.md es de la fabrica/);
+  d = installed(); fs.appendFileSync(path.join(d, '02-DOCS/wiki/context.md'), '\nver RF-F3\n');
+  r = sh([d, '--check']); assert.equal(r.status, 1); assert.match(r.stdout, /requisitos RF-F de la fabrica en: 02-DOCS\/wiki\/context\.md/);
+  d = installed(); fs.appendFileSync(path.join(d, 'AGENTS.md'), '\nRF-F10\n');
+  r = sh([d, '--check']); assert.equal(r.status, 1); assert.match(r.stdout, /RF-F de la fabrica en:.*AGENTS\.md/);
+  d = installed(); fs.appendFileSync(path.join(d, '02-DOCS/wiki/context.md'), '\nRF-n y RF-F sin numero no son requisitos\n');
+  assert.equal(sh([d, '--check']).status, 0);
 });
