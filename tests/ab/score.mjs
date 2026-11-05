@@ -1,6 +1,9 @@
 // Puntuacion automatica del A/B (aproximada: revisa tambien los textos crudos en out/).
 export const FLAWS = {
-  rate_limit: />=\s*5|off[- ]by[- ]one|un intento (de m[aá]s|extra|adicional)|a la 6|sexto intento|comparaci[oó]n (estricta|incorrecta)|`?>`? en lugar de|límite (exacto|inclusivo)/i,
+  // rate_limit: el fallo es que isBlocked cambio de `>=` a `>`. Ademas de las frases de "off-by-one", se reconocen las que
+  // describen el cambio tal cual ("`>=` pasa/paso a `>`", "de `attempts >= MAX` a `attempts > MAX`", "`>=` -> `>`"); sin ellas el
+  // puntuador no veia el fallo aunque los tres modelos lo senalaban.
+  rate_limit: />=[^\n]{0,40}?(pas[aó]|cambi[aó]|→|->|=>)[^\n]{0,30}?>(?!=)|\bde\s+`?[^`\n]*>=[^`\n]*`?\s+a\s+`?[^`\n]*>(?!=)|>=\s*5|off[- ]by[- ]one|un intento (de m[aá]s|extra|adicional)|a la 6|sexto intento|comparaci[oó]n (estricta|incorrecta)|`?>`? en lugar de|límite (exacto|inclusivo)/i,
   sql_injection: /sql[\s-]*inject|inyecci[oó]n( de)? sql|inyecci[oó]n|par[aá]metriz|prepared|concatenaci[oó]n/i,
   tautology_test: /tautol|compara (el valor )?consigo|mismo (valor|resultado|llamado)|siempre (es )?(verdader|pasa)|no valida|aserci[oó]n (vac[ií]a|trivial|in[uú]til)|test(s)? (d[eé]bil|debilitad)|se elimin[oó] (la )?(aserci[oó]n|validaci[oó]n)|par[aá]metros/i,
 };

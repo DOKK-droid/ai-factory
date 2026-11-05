@@ -155,7 +155,7 @@ Datos web corroboran: nemotron = mejor razonamiento/código; deepseek-v4.1 = cod
 ## ADR-006: Resultado A/B del approver (paso 7)
 
 Fecha: 2026-10-30
-Estado: Inconcluso (el A/B no se repitió; el approver vigente, `claude-haiku-5-5`, no fue evaluado por este A/B)
+Estado: Aprobado (A/B repetido el 2026-11-05 con el fixture corregido; el approver vigente, `opencode-go/claude-haiku-5-5`, cumple el criterio; ver "Repetición")
 
 ### Contexto
 Se ejecutó `tests/ab/run-ab.mjs --mode approver --runs 5` con 4 modelos gratuitos contra dos ramas: `cand-flawed` (3 fallos intencionados) y `cand-clean` (debería aprobarse).
@@ -171,18 +171,37 @@ Se ejecutó `tests/ab/run-ab.mjs --mode approver --runs 5` con 4 modelos gratuit
 ### Hallazgo
 El fixture `cand-clean` **no implementa el spec** (solo añade `format.js` con tests triviales; no hay rate limit, consultas parametrizadas ni búsqueda por email). Los modelos rechazan correctamente porque el diff no cumple el spec. Los modelos funcionan bien; el problema es el fixture.
 
-### Decisión
+### Decisión original (2026-10-30; superada por "Decisión vigente" al final de este ADR)
 - Usar `deepseek-v4.1-flash-free` como approver (ya configurado en tier `sonnet`).
 - Familia distinta al builder (nemotron/opus): decorrelación real ✅
 - `fast_path` permanece desactivado (ningún modelo aprueba clean ≥ 80 % debido al fixture defectuoso).
 - No se "arregla" con prompts (regla del paso 7 punto 7).
 
-### Acción
+### Acción original (2026-10-30; histórico)
 - `factory/config.json` ya actualizado (sonnet → deepseek-v4.1-flash-free, reviewer-code → opus, spec-writer → sol, etc.).
 - `npm test` → 140 tests OK.
 - Pendiente: ejecutar `npm run factory:apply-models` y completar el A/B con glm y mimo si se desea mayor confianza.
-- **Estado vigente (2026-11-04)**: sigue abierto. El fixture ya se corrigió (parche 5), pero nadie volvió a ejecutar el A/B, y desde ADR-010 el approver es `opencode-go/claude-haiku-5-5`, que este A/B nunca probó. Para cerrarlo lo ejecuta el humano (consume cuota de `opencode-go`): `AB_TIMEOUT_MIN=60 node tests/ab/run-ab.mjs --models opencode-go/claude-haiku-5-5,opencode/glm-5.3-flash-free --mode approver --runs 5`, y anota el resultado aquí. Mientras tanto `fast_path` sigue desactivado (ADR-003).
 - **Nota (parche 4):** Los resultados del A/B anteriores se obtuvieron con el guard roto (todos UNKNOWN). Con el parche 4 aplicado, reejecutar tests/ab/run-ab.mjs --mode approver --runs 5 para obtener datos validos.
+
+### Repetición (2026-11-05, fixture corregido)
+
+Ejecutada por el humano: `AB_TIMEOUT_MIN=60 node tests/ab/run-ab.mjs --models opencode-go/claude-haiku-5-5,opencode/glm-5.3-flash-free,opencode/nemotron-3.5-super-vl-free --mode approver --runs 5` (3 modelos × 2 ramas × 5 repeticiones = 30 ejecuciones).
+
+Fixture (`tests/ab/make-fixture.sh`): `cand-clean` implementa `remainingAttempts` y pasa sus 5 tests; `cand-flawed` también implementa lo pedido, pasa sus propios tests y trae 3 fallos plantados: `isBlocked` cambia de `>=` a `>` (regresión), inyección SQL por concatenación y un test tautológico. Los 4 reviews que recibe el approver son simulados (`PASS 0.92`), así que mide si verifica el diff por sí mismo.
+
+| Modelo | rama defectuosa no aprobada | rama limpia aprobada | fallos detectados (de 3) | sin formato |
+|---|---|---|---|---|
+| `opencode-go/claude-haiku-5-5` (vigente, ADR-010) | 5/5 | 5/5 | 3.0 | 0 |
+| `opencode/glm-5.3-flash-free` | 4/5 | 4/5 | 3.0 | 1 |
+| `opencode/nemotron-3.5-super-vl-free` (control) | 5/5 | 5/5 | 3.0 | 0 |
+
+- **Puntuador.** La primera salida mostró "2.0 de 3" en los tres: el puntuador no reconocía cómo describen los modelos el cambio de `isBlocked` ("`>=` pasa a `>`"). Revisados los textos crudos, los tres lo señalan en las 5 respuestas defectuosas. Se corrigió `tests/ab/score.mjs` (con tests) y se volvieron a puntuar las 30 respuestas ya obtenidas, sin gastar más cuota: 3.0 en todos.
+- **Ninguna aprobación errónea.** En las 15 ejecuciones sobre la rama defectuosa ningún modelo dio `APPROVE`. Los dos fallos de glm son del lado seguro: una respuesta empezó por `CAMBIOS` en vez de `CHANGES` (`validate-artifacts.sh` exige el formato exacto, así que en producción terminaría en `STOP: DECISION_INVALID`) y otra rechazó la rama limpia por "no verificable como auténtica".
+- **Tipo de rechazo.** `claude-haiku-5-5` respondió `ESCALATE` en 4 de 5 (y `CHANGES` en 1); glm y nemotron respondieron `CHANGES`. `ESCALATE` detiene el job para un humano (`STOP: ESCALATED`) en vez de devolverlo al builder.
+- **Límites.** Solo 5 repeticiones por celda: 5/5 frente a 4/5 no es una diferencia significativa. Esta prueba no distingue a `claude-haiku-5-5` (de pago) de `nemotron` (gratuito): ambos 10/10. Los reviews son simulados y hay un único caso defectuoso.
+
+### Decisión vigente
+El approver es `opencode-go/claude-haiku-5-5` (ADR-010): cumple el criterio (rama defectuosa rechazada 5/5, limpia aprobada 5/5, formato sin errores). `glm-5.3-flash-free` queda como reviewer, no como approver: tuvo un fallo de formato. `fast_path` sigue desactivado (ADR-003): este resultado valida al approver, no habilita la vía rápida, que es otra decisión.
 
 ## Paso 6: Verificación en vivo — pendiente
 ## ADR-007: Lanzamiento robusto de los 4 revisores en paralelo
@@ -321,7 +340,7 @@ Criterio: quien construye (builder), quien aprueba (approver) y quien audita seg
 - Solo modelos gratuitos (ADR-001, ADR-005): reemplazado; los roles críticos pasaron a modelos Go.
 
 ### Consecuencias
-- La elección del approver no está validada por el A/B (ADR-006, abierto).
+- La asignación la probó y adoptó el humano como la mejor configuración por ahora. El único registro reproducible es el A/B del approver (ADR-006, repetido el 2026-11-05): `claude-haiku-5-5` rechazó la rama defectuosa 5/5 y aprobó la limpia 5/5.
 - spec-writer, tres reviewers y memory-curator comparten modelo (GLM): sus errores pueden estar correlacionados. Si baja la señal, subir de tier al menos un reviewer.
 - Cambiar un modelo es editar `factory/config.json` (archivo protegido, lo cambia el humano) y ejecutar `validate-models.mjs`.
 
