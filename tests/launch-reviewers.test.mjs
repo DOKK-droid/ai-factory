@@ -27,6 +27,7 @@ case "$mode" in
   nofmt_then_ok) if [ "$n" -eq 1 ]; then echo "texto libre"; else ok; fi ;;
   fail) echo "boom" >&2; exit 1 ;;
   hang) sleep 30 ;;
+  hang_long) sleep 600 ;;
 esac
 echo "end $agent $(date +%s.%N)" >> "$LOG/events"
 `;
@@ -44,8 +45,8 @@ function setup({ gate = 'GATE: PASS\n', models = Object.values(MODEL), agentMode
   write(path.join(logs, 'models.txt'), `Available models\n${models.join('\n')}\nother/model\n`);
   return { repo, job, logs, bin };
 }
-function launch(s, env = {}, args = ['j1']) {
-  return run('bash', [LAUNCH, ...args], { cwd: s.repo, timeout: 120000, env: { ...process.env, OPENCODE_BIN: s.bin, STUB_LOG: s.logs, STUB_MODELS: path.join(s.logs, 'models.txt'),
+function launch(s, env = {}, args = ['j1'], timeout = 120000) {
+  return run('bash', [LAUNCH, ...args], { cwd: s.repo, timeout, env: { ...process.env, OPENCODE_BIN: s.bin, STUB_LOG: s.logs, STUB_MODELS: path.join(s.logs, 'models.txt'),
     FACTORY_BASE: 'main', FACTORY_JOBS_DIR: path.join(s.repo, 'jobs'), REVIEW_POLL_SECS: '1', REVIEW_MAX_PARALLEL: '4', ...env } });
 }
 const review = (s, role, round = 1) => fs.readFileSync(path.join(s.job, `round-${round}`, `review-${role}.md`), 'utf8');
@@ -89,11 +90,14 @@ test('limpia vallas ``` y texto previo de la respuesta del modelo', () => {
   const s = setup(); launch(s, { STUB_MODE_REVIEWER_SECURITY: 'fenced' });
   assert.match(review(s, 'security'), /^VERDICT: CHANGES\nSCORE: 0\.4\n/); assert.doesNotMatch(review(s, 'security'), /```/);
 });
+// 120 s (no 2 s): el limite se aplica a los 4 reviewers y el contador va en segundos enteros; con 2 s, una maquina cargada
+// (otro proceso, WSL con el navegador abierto) mataba tambien a los reviewers sanos y el job quedaba atascado en el gate.
+// Cuesta algo mas de 2 min por corrida; el stub 'hang_long' (600 s) sobrevive al limite para que lo corte el vigilante.
 test('vigilante por inactividad: mata al reviewer colgado y sigue con los demas', () => {
   const s = setup(); const t0 = Date.now();
-  const r = launch(s, { STUB_MODE_REVIEWER_CODE: 'hang', REVIEW_IDLE_SECS: '2', REVIEW_RETRIES: '0' });
-  assert.equal(r.status, 3); assert.match(review(s, 'code'), /inactivo 2s/); assert.match(review(s, 'security'), /^VERDICT: PASS/);
-  assert.ok(Date.now() - t0 < 60000);
+  const r = launch(s, { STUB_MODE_REVIEWER_CODE: 'hang_long', REVIEW_IDLE_SECS: '120', REVIEW_RETRIES: '0' }, ['j1'], 400000);
+  assert.equal(r.status, 3); assert.match(review(s, 'code'), /inactivo 120s/); assert.match(review(s, 'security'), /^VERDICT: PASS/);
+  assert.ok(Date.now() - t0 < 300000);
 });
 test('timeout total: corta aunque haya actividad', () => {
   const s = setup(); const r = launch(s, { STUB_MODE_REVIEWER_CODE: 'hang', REVIEW_TIMEOUT_SECS: '2', REVIEW_IDLE_SECS: '0', REVIEW_RETRIES: '0' });
