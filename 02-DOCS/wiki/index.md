@@ -6,7 +6,7 @@
 |-------|-------|------|
 | constitution | `02-DOCS/wiki/sdd/constitution.md` | Principios no negociables de la AI Factory |
 | arquitectura | `02-DOCS/wiki/sdd/constitution.md` | Stack canon, calidad, convenciones, branching |
-| ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001 a ADR-010; el estado de un ADR nuevo lo fija el flujo: `Aprobado` si el humano confirmó el spec con `spec.ok`) |
+| ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001 a ADR-011; el estado de un ADR nuevo lo fija el flujo: `Aprobado` si el humano confirmó el spec con `spec.ok`) |
 | metodología | `02-DOCS/wiki/sdd/methodology.md` | Método genérico: actores, fases, buenas prácticas y definición de hecho (vale para cualquier proyecto) |
 | requisitos de la fábrica | `02-DOCS/wiki/sdd/factory-requirements.md` | RF-F1 a RF-F10: lo que debe garantizar la propia fábrica (no se copia a otros proyectos) |
 | plantilla de spec | `02-DOCS/wiki/sdd/spec-template.md` | Estructura del spec (perfil `full`): actores, RF-n, diseño, ADR, trazabilidad |
