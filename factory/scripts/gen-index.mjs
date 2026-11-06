@@ -16,7 +16,7 @@ const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 function walk(dir, rel = '') {
   const out = [];
-  for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true }).sort((a, b) => cmp(a.name, b.name))) {
+  for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) { if (!e.name.startsWith('.')) out.push(...walk(dir, r)); }
     else if (e.isFile() && e.name.endsWith('.md') && r !== 'index.md') out.push(r);
@@ -54,6 +54,7 @@ export function generate(wiki, prefix) {
     const row = { rel, title: d.title || rel, what: d.what };
     if (rel.startsWith('jobs/')) jobs.push({ ...row, date: (rel.match(/-(\d{6})-[0-9a-f]{4}\.md$/) || [])[1] || '' }); else rows.push(row);
   }
+  rows.sort((a, b) => cmp(a.rel, b.rel));
   jobs.sort((a, b) => cmp(b.date, a.date) || cmp(a.rel, b.rel));
   const table = (list) => ['| Pagina | Ruta | Que |', '|---|---|---|', ...list.map((r) => `| ${r.title} | \`${prefix}/${r.rel}\` | ${r.what} |`)];
   return [`# ${prefix}/index.md`, '', '> Generado por `factory/scripts/gen-index.mjs`. No lo edites a mano: cambia la cabecera (`title`, `description`) o el primer parrafo de la pagina y regeneralo.', '',
