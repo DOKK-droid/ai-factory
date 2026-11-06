@@ -12,31 +12,31 @@ Input → Spec Writer ←→ Brain → Builder ←→ Brain → [4 Revisores en 
 
 | Ruta | Propósito |
 |------|-----------|
-| `.opencode/agent/*.md` | Agentes OpenCode (10 agentes) |
+| `.opencode/agent/*.md` | Agentes OpenCode (11 agentes) |
 | `.opencode/command/factory.md` | Comando `/factory` |
-| `01-TOOLS/` | Scripts de orquestación y checks |
+| `01-TOOLS/` | Scripts de orquestación y checks; `next-step.sh` decide el siguiente paso de cada job |
 | `02-DOCS/` | Brain persistente (memoria) |
 | `02-DOCS/wiki/` | ADR, patrones, SDD, lecciones aprendidas |
 | `03-SKILLS/` | SKILL.md por agente |
 | `.hooks/` | Reflexes y hooks de seguridad |
 | `factory/config.json` | Mapeo tiers → modelos OpenCode |
+| `factory/project.json` | Política del proyecto: `require_spec_ok`, `max_rounds`, `spec_profile` (`full`), superficies con revisión humana y páginas del Brain que lee cada agente |
 | `factory/jobs/<id>/` | Traza por trabajo (auditable) |
-| `factory/scripts/` | Utilidades de la factory |
+| `factory/scripts/` | Utilidades de la factory (guard, validación de modelos, `install-into.sh`, `onboard-project.sh`) |
 
-## Modelos gratuitos de OpenCode (configurables en `factory/config.json`)
+## Flujo de un job
 
-| Tier | Rol | Modelo |
-|------|-----|--------|
-| opus | Spec Writer, Builder, Approver, Human Gate | `opencode/nemotron-3.5-super-vl-free` |
-| sonnet | Reviewer Código | `opencode/deepseek-v4-flash-free` |
-| sol | Reviewer Seguridad, Reviewer UX | `opencode/glm-5.3-flash-free` |
-| astra | Reviewer UI | `opencode/mimo-v2.6-flash-free` |
+El orden de los pasos no vive en un prompt: lo decide `01-TOOLS/next-step.sh <id>` (máquina de estados de solo lectura). El orchestrator repite `next-step.sh` → ejecuta lo que dice (`RUN:` o `DELEGATE:`) hasta `DONE` o `STOP:`. Un `STOP: HUMAN_CONFIRM_SPEC` espera que el humano revise el spec y cree `spec.ok`; con `spec_profile: "full"` el spec lleva actores, requisitos RF-n, diseño y ADR. Los 4 revisores se lanzan en paralelo con `launch-reviewers.sh`, el aprobador consolida y el PR sale en borrador desde `factory/<id>` con la página del Brain del job.
+
+## Modelos
+
+Cada rol tiene su modelo en `factory/config.json` (tiers y roles) y en el campo `model:` de `.opencode/agent/*.md`; la decisión vigente está en ADR-010 (`02-DOCS/wiki/sdd/decisions.md`). Para comprobar que los IDs existen: `npm run factory:validate-models`.
 
 ## Comandos
 
 - `/factory "<tarea>"` — ejecuta el pipeline completo
-- `/factory next` — toma el siguiente item del backlog
-- `/factory status` — estado de jobs activos
+- `/factory <id-de-job>` — reanuda un job existente
+- `/factory status` — estado de los jobs de `factory/jobs/`
 
 ## Reglas
 
@@ -50,4 +50,6 @@ Input → Spec Writer ←→ Brain → Builder ←→ Brain → [4 Revisores en 
 - `./factory-maint` inicia una sesión de mantenimiento supervisada con acceso a archivos protegidos. Solo úsalo para cambios de configuración, permisos, guard, hooks o ramas de mantenimiento.
 - Una sesión del agente no debe modificar configuración o controles de seguridad.
 
-<!-- comentario de prueba -->
+## Usar la fábrica en otro proyecto
+
+`bash factory/scripts/install-into.sh <ruta-destino>` (dry-run por defecto; `--apply` instala, `--check` verifica) monta la fábrica en un repo git existente con un Brain limpio. Cada proyecto tiene su propio `02-DOCS/` y su propio check de CI. Guía completa: [docs/ONBOARDING.md](docs/ONBOARDING.md).
