@@ -203,7 +203,12 @@ Fixture (`tests/ab/make-fixture.sh`): `cand-clean` implementa `remainingAttempts
 ### Decisión vigente
 El approver es `opencode-go/claude-haiku-5-5` (ADR-010): cumple el criterio (rama defectuosa rechazada 5/5, limpia aprobada 5/5, formato sin errores). `glm-5.3-flash-free` queda como reviewer, no como approver: tuvo un fallo de formato. `fast_path` sigue desactivado (ADR-003): este resultado valida al approver, no habilita la vía rápida, que es otra decisión.
 
-## Paso 6: Verificación en vivo — pendiente
+## Paso 6: Verificación en vivo — hecha
+
+Confirmado por el humano el 2026-11-05: la verificación en vivo del paso 6, ejecutada después de los parches, funciona. Es la prueba de la propia fábrica de punta a punta (`/factory` hasta el PR en borrador), no la del instalador en otro proyecto (esa sigue pendiente: `docs/PRUEBAS-FABRICA.md`, sección 10).
+
+El detalle de la ejecución (job, commits y salidas) no está registrado en esta página: queda en las trazas de `factory/jobs/<id>/` y en el PR del job.
+
 ## ADR-007: Lanzamiento robusto de los 4 revisores en paralelo
 Fecha: 2026-10-30
 Estado: Reemplazado por el parche 5 (launch-reviewers.sh reescrito)
