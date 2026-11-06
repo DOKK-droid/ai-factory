@@ -27,6 +27,7 @@ COPY_ENTRIES=(
   opencode.json
   .opencode/agent
   .opencode/command/factory.md
+  .opencode/command/factory-init.md
   .opencode/plugins/factory-guard.js
   .hooks
   01-TOOLS
