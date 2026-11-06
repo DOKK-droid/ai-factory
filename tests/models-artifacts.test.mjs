@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { REPO, tmp, write, run } from './helpers.mjs';
-import { parseModelsOutput, agentModels } from '../factory/scripts/validate-models.mjs';
+import { parseModelsOutput, agentModels, DEFAULT_TIMEOUT_MS } from '../factory/scripts/validate-models.mjs';
 
 const VM = path.join(REPO, 'factory/scripts/validate-models.mjs');
 const VA = path.join(REPO, '01-TOOLS/validate-artifacts.sh');
@@ -87,6 +87,14 @@ test('validate-models: NO EXISTE con la lista en cache avisa de FACTORY_MODELS_C
   const r = vmLive(d, bin); assert.equal(r.status, 1); assert.match(r.stderr, /NO EXISTE.*c\/z/); assert.match(r.stderr, /FACTORY_MODELS_CACHE_TTL_S=0/);
   const f = vmLive(d, bin, { FACTORY_MODELS_CACHE_TTL_S: '0' });
   assert.equal(f.status, 1); assert.match(f.stderr, /NO EXISTE.*c\/z/); assert.doesNotMatch(f.stderr, /cache/i);
+});
+test('validate-models: el timeout por defecto es de al menos 10 min (opencode models llego a tardar mas de 600 s)', () => {
+  assert.ok(DEFAULT_TIMEOUT_MS >= 600000, `DEFAULT_TIMEOUT_MS=${DEFAULT_TIMEOUT_MS}`);
+});
+test('validate-models: informa cuanto tardo opencode models; con la lista en cache no lo dice', () => {
+  const { d, bin } = liveProject({ sleep: 1 });
+  const a = vmLive(d, bin); assert.equal(a.status, 0); assert.match(a.stderr, /opencode models respondio en [1-9]\d*\.\d s/);
+  const b = vmLive(d, bin); assert.equal(b.status, 0); assert.doesNotMatch(b.stderr, /respondio en/);
 });
 test('validate-models: una salida vacia o invalida nunca se cachea', () => {
   const { d, bin } = liveProject({ out: 'basura\n' });
