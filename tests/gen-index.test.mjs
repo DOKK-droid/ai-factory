@@ -24,6 +24,12 @@ test('RF-I6: describe usa title/description de la cabecera y, si no, el primer #
   assert.equal(describe(PAGES['project/01-requisitos.md']).title, 'Requisitos');
   assert.match(describe(PAGES['project/01-requisitos.md']).what, /Lista de requisitos \\\| con barra/);   // la barra no rompe la tabla
 });
+test('RF-I6: una barra invertida antes de | no deja escapar la barra de columna (escapa \\ y luego |)', () => {
+  // `a\|b` sin escapar la \ daria `a\\|b`: la \\ es una barra literal y la | parte la fila en otra columna
+  assert.equal(describe('# T\n\nUsa a\\|b aqui.\n').what, 'Usa a\\\\\\|b aqui.');
+  assert.equal(describe('# T\\\n\nTexto.\n').title, 'T\\\\');
+});
+
 test('RF-I6: --write genera el índice: mapa por ruta y jobs de más reciente a más antigua', () => {
   const d = wiki(PAGES); assert.equal(cli(d, '--write').status, 0);
   const idx = fs.readFileSync(path.join(d, '02-DOCS/wiki/index.md'), 'utf8');

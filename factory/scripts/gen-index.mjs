@@ -43,7 +43,7 @@ export function describe(text) {
       desc = (t.match(/^.+?[.!?](?=\s|$)/) || [t])[0]; break;
     }
   }
-  const clean = (s) => String(s || '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
+  const clean = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
   return { title: clean(fm.title || (h1 || '').replace(/^#\s+/, '')), what: clean(desc).slice(0, 160) };
 }
 
