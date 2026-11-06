@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO, tmp, write, run } from './helpers.mjs';
+import { REPO, tmp, write, run, git } from './helpers.mjs';
 import { makeProject, lintCli, codes, head, DOC_NAMES, LINT } from './project-fixture.mjs';
 
 const check = (p, ...a) => lintCli(p.root, 'check', '--strict', ...a);
@@ -262,4 +262,17 @@ test('CLI: uso incorrecto sale 64; sin la carpeta, check no falla y gate sí', (
   assert.equal(run('node', [LINT, 'check', '--dir']).status, 64);
   assert.equal(lintCli(tmp('af-x-'), 'check').status, 0); assert.equal(lintCli(tmp('af-x-'), 'gate').status, 1);
   assert.equal(fs.existsSync(LINT), true);
+});
+
+// ---------------------------------------------------------------- instalador
+test('RF-I14: el instalador lleva plantillas y scripts al destino sin crear documentos de proyecto ni heredar nada de la fábrica', () => {
+  const d = tmp('af-inst-'); git(d, 'init', '-q', '-b', 'main'); git(d, 'config', 'user.email', 't@t.t'); git(d, 'config', 'user.name', 't'); git(d, 'config', 'commit.gpgsign', 'false');
+  write(path.join(d, 'README.md'), '# p\n'); git(d, 'add', '-A'); git(d, 'commit', '-qm', 'base');
+  const r = run('bash', [path.join(REPO, 'factory/scripts/install-into.sh'), d, '--apply'], { cwd: REPO });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  for (const f of [...DOC_NAMES, 'discovery']) assert.ok(fs.existsSync(path.join(d, 'factory/templates/project', `${f}.md`)), `plantilla ${f} no instalada`);
+  for (const f of ['project-lint.mjs', 'gen-index.mjs']) assert.ok(fs.existsSync(path.join(d, 'factory/scripts', f)), `${f} no instalado`);
+  assert.ok(!fs.existsSync(path.join(d, '02-DOCS/wiki/project')), 'el instalador no debe crear la base documental: la crea /factory-init');
+  assert.ok(!fs.existsSync(path.join(d, '02-DOCS/wiki/sdd/factory-init-spec.md')), 'las páginas de la fábrica no viajan');
+  assert.equal(run('bash', [path.join(REPO, 'factory/scripts/install-into.sh'), d, '--check'], { cwd: REPO }).status, 0);
 });
