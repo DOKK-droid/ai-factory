@@ -113,7 +113,8 @@ Formato de salida: `<CÓDIGO> <E|W> <archivo>:<línea> <mensaje>`. Sale con 1 si
 | PL002 | E | `estado` no es borrador, aprobado o desactualizado |
 | PL003 | E | `version` no es semver o `fecha` no es ISO |
 | PL004 | E | `documento:` no coincide con el nombre del archivo |
-| PL010 | E | ID mal formado (`REQ-F-x`, `REQ-3`, …) |
+| PL005 | E | documento ausente (solo con `--strict` y en `gate`) |
+| PL010 | E | ID mal formado (`REQ-F-x`, `REQ-3`, …); `REQ-F` y `REQ-NF` sin número son nombres de tipo y se aceptan |
 | PL011 | E | ID definido más de una vez (en uno o en dos documentos) |
 | PL012 | E | ID definido fuera de su documento propietario |
 | PL013 | E | aparece `RF-n` o `RF-F<n>` en un documento de proyecto |
@@ -135,11 +136,12 @@ Formato de salida: `<CÓDIGO> <E|W> <archivo>:<línea> <mensaje>`. Sale con 1 si
 | PL051 | E | documento aprobado que cita un ID cuyo bloque cambió o ya no existe |
 | PL052 | W | contenido cambiado sin subir la versión |
 | PL053 | E | la cabecera dice `aprobado` sin registro en `project.ok`, o al revés |
+| PL054 | E | `project.ok` no es un JSON válido con `docs` (nunca se interpreta como aprobación) |
 | PL060 | W | texto de un REQ repetido literalmente en otro documento («un hecho, un documento») |
 | PL061 | E | `trazabilidad.md` existe y no coincide con lo generado |
 | PL070 | E | marcador `RELLENAR` en un documento aprobado |
 
-Las reglas de cobertura (PL021, PL022, PL023, PL025, PL026) se evalúan solo entre documentos sin marcador `RELLENAR`, para poder avanzar documento a documento; `gate` y `check --strict` las exigen todas.
+Se ignoran los bloques de código, los comentarios HTML y el código en línea. Las reglas de cobertura (PL021, PL022, PL023, PL025, PL026) se evalúan solo entre documentos sin marcador `RELLENAR`, para poder avanzar documento a documento; `gate` y `check --strict` las exigen todas. Implementado en la rama 1 (`feat/project-docs-base`): 40 tests y 39 mutaciones, todas detectadas.
 
 ### 5.2 Comandos
 

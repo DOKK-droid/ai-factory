@@ -77,7 +77,7 @@ Cada rama termina con: lista de commits, resultado de `node --test tests/*.test.
 ## Registro de avance
 
 - [x] Rama 0 — plan y especificación
-- [ ] Rama 1
+- [x] Rama 1 — `feat/project-docs-base` (plantillas, `project-lint`, `gen-index`; 553 tests en verde; 39 mutaciones detectadas)
 - [ ] Rama 2
 - [ ] Rama 3
 - [ ] Rama 4
