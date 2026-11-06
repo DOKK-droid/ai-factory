@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { classifyBash, classifyTool, PROTECTED_PATHS } from '../factory/scripts/command-guard.mjs';
 import { fx, fakeGh, drive } from './ns-fixture.mjs';
 
@@ -14,13 +15,13 @@ const AGENTS = ['orchestrator', 'intake', 'spec-writer', 'builder', 'reviewer-se
 function perms(agent) {
   const txt = fs.readFileSync(path.join(ROOT, '.opencode/agent', agent + '.md'), 'utf8');
   const fm = txt.split('\n---\n')[0].split('\n');
-  const out = { edit: [], bash: [], flat: {} };
+  const out = { edit: [], bash: [], task: [], flat: {} };
   let sec = null;
   for (const l of fm) {
     let m = l.match(/^  (\w+):\s*(\w+)?$/);
     if (m) { sec = m[1]; if (m[2]) out.flat[sec] = m[2]; continue; }
     m = l.match(/^    "([^"]+)":\s*(\w+)$/);
-    if (m && (sec === 'edit' || sec === 'bash')) out[sec].push([m[1], m[2]]);
+    if (m && (sec === 'edit' || sec === 'bash' || sec === 'task')) out[sec].push([m[1], m[2]]);
   }
   return out;
 }
@@ -178,4 +179,112 @@ test('/factory: el comando delega en next-step.sh y empieza por el estado 0', ()
   const cmd = fs.readFileSync(path.join(ROOT, '.opencode/command/factory.md'), 'utf8');
   assert.match(cmd, /next-step\.sh/); assert.match(cmd, /--new-id/); assert.match(cmd, /estado 0/); assert.match(cmd, /\$ARGUMENTS/);
   for (const a of cmd.match(/@[a-z-]+/g) || []) assert.ok(AGENTS.includes(a.slice(1)), a);
+});
+
+// ---- /factory-init: discovery y los cinco especialistas de la base documental ----
+const INIT_ROLES = { discovery: 'go-approver', 'system-analyst': 'sol', 'domain-modeler': 'sol', architect: 'go-approver', 'deployment-planner': 'sol', 'consistency-auditor': 'go-security' };
+const INIT_AGENTS = Object.keys(INIT_ROLES);
+const OWN = {
+  discovery: ['discovery.md'], 'system-analyst': ['00-vision.md', '01-requisitos.md', '02-casos-de-uso.md'], 'domain-modeler': ['03-dominio.md', '05-datos.md'],
+  architect: ['04-arquitectura.md'], 'deployment-planner': ['06-despliegue.md'], 'consistency-auditor': [],
+};
+const WT = '/home/u/ai-factory/factory/worktrees/init-1/';
+const PD = '02-DOCS/wiki/project/';
+const ALL_PROJECT_FILES = ['00-vision.md', '01-requisitos.md', '02-casos-de-uso.md', '03-dominio.md', '04-arquitectura.md', '05-datos.md', '06-despliegue.md', 'discovery.md', 'trazabilidad.md', 'project.ok'];
+const CONFIG = JSON.parse(fs.readFileSync(path.join(ROOT, 'factory/config.json'), 'utf8'));
+const PATCH4 = 'docs/propuestas/rama4-factory-init.patch';
+const rolesApplied = INIT_AGENTS.filter((a) => CONFIG.roles[a] !== undefined).length;
+const missPatch = (ok) => (ok ? false : `falta aplicar ${PATCH4} (roles de los seis agentes en factory/config.json)`);
+
+test('init: los seis agentes existen, cada patron de edit es de la worktree (empieza por * y nombra factory/worktrees/*/)', () => {
+  for (const a of INIT_AGENTS) {
+    assert.ok(fs.existsSync(path.join(ROOT, '.opencode/agent', a + '.md')), a);
+    const edit = perms(a).edit.filter(([p]) => p !== '*');
+    for (const [p] of perms(a).edit) assert.ok(p.startsWith('*'), `${a}: "${p}"`);
+    for (const [p, act] of edit) if (act === 'allow') assert.match(p, /^\*factory\/worktrees\/\*\/02-DOCS\//, `${a}: "${p}" debe ser de la worktree`);
+  }
+});
+
+test('init: cada agente escribe solo sus archivos (en la worktree) y el guard lo acepta; nada en el checkout principal', () => {
+  for (const a of INIT_AGENTS) {
+    const rules = perms(a).edit;
+    const own = OWN[a].map((f) => PD + f);
+    if (a === 'architect') own.push('02-DOCS/wiki/sdd/decisions.md');
+    for (const f of own) {
+      assert.equal(decide(rules, WT + f, 'deny'), 'allow', `${a} debe poder escribir ${f}`);
+      assert.equal(classifyTool('write', { filePath: WT + f }).blocked, false, `el guard bloquea ${a} -> ${f}`);
+      assert.equal(decide(rules, '/home/u/ai-factory/' + f, 'deny'), 'deny', `${a}: ${f} en el checkout principal`);
+      assert.equal(decide(rules, f, 'deny'), 'deny', `${a}: ${f} relativa (checkout principal)`);
+    }
+    const others = ALL_PROJECT_FILES.map((f) => PD + f).filter((f) => !own.includes(f));
+    for (const f of [...others, '02-DOCS/wiki/sdd/decisions.md'].filter((f) => !own.includes(f))) assert.equal(decide(rules, WT + f, 'deny'), 'deny', `${a} no debe escribir ${f}`);
+    for (const f of ['src/app.js', 'factory/jobs/init-1/spec.md', 'factory/jobs/init-1/brain.ok', 'opencode.json', 'AGENTS.md', 'factory/config.json']) assert.equal(decide(rules, WT + f, 'deny'), 'deny', `${a} no debe escribir ${f}`);
+  }
+});
+
+test('init: solo discovery tiene task (a los cinco especialistas); webfetch solo ask en discovery; ninguno tiene websearch', () => {
+  assert.deepEqual(perms('discovery').task.filter(([, act]) => act === 'allow').map(([p]) => p).sort(), INIT_AGENTS.filter((a) => a !== 'discovery').sort());
+  assert.equal(decide(perms('discovery').task, 'builder', 'deny'), 'deny'); assert.equal(decide(perms('discovery').task, 'discovery', 'deny'), 'deny');
+  for (const a of INIT_AGENTS) {
+    const f = perms(a).flat;
+    assert.equal(f.websearch, 'deny', `${a}: websearch`);
+    assert.equal(f.webfetch, a === 'discovery' ? 'ask' : 'deny', `${a}: webfetch`);
+    if (a !== 'discovery') assert.equal(perms(a).task.length, 0, `${a} no debe tener task`);
+  }
+  for (const a of AGENTS) assert.equal(perms(a).task.length, 0, `${a} (pipeline) no recibe task nuevo`);
+});
+
+test('init: nadie ejecuta project-lint approve ni sudo/install-managed/onboard-project --apply; discovery pregunta antes de init-project --apply', () => {
+  const NEVER = ['node factory/scripts/project-lint.mjs approve 00-vision', 'node factory/scripts/project-lint.mjs --root x approve 01-requisitos', 'sudo bash factory/scripts/install-managed.sh --apply',
+    'bash factory/scripts/install-managed.sh --apply', 'bash factory/scripts/onboard-project.sh o/r --apply', 'git push origin main', 'git commit -m x', 'git add -A', 'rm -rf 02-DOCS'];
+  for (const a of INIT_AGENTS) for (const c of NEVER) assert.equal(decide(perms(a).bash, c, 'deny'), 'deny', `${a}: ${c}`);
+  const d = perms('discovery').bash;
+  assert.equal(decide(d, 'bash factory/scripts/init-project.sh --dir .'), 'allow'); assert.equal(decide(d, 'bash factory/scripts/init-project.sh'), 'allow');
+  for (const step of ['install', 'deps', 'hooks', 'rsc', 'workspace']) assert.equal(decide(d, `bash factory/scripts/init-project.sh --dir . --apply ${step}`), 'ask', step);
+  for (const c of ['bash factory/scripts/init-project.sh', 'node factory/scripts/project-lint.mjs state --root factory/worktrees/init-1', 'node factory/scripts/project-lint.mjs trace --write --root factory/worktrees/init-1']) {
+    assert.equal(classifyBash(c).blocked, false, `el guard bloquea: ${c}`); assert.equal(decide(d, c), 'allow', c);
+  }
+  for (const c of ['node factory/scripts/project-lint.mjs approve 00-vision']) assert.equal(classifyBash(c).blocked, true, 'el guard debe bloquear approve a un agente');
+});
+
+test('init: los especialistas y el auditor solo comprueban con project-lint (check/state/impact segun el rol); el auditor no escribe', () => {
+  for (const a of ['system-analyst', 'domain-modeler', 'architect', 'deployment-planner']) {
+    assert.equal(decide(perms(a).bash, 'node factory/scripts/project-lint.mjs check --root factory/worktrees/init-1'), 'allow', a);
+    assert.equal(decide(perms(a).bash, 'node factory/scripts/project-lint.mjs trace --write'), 'deny', `${a} no genera la trazabilidad`);
+  }
+  const au = perms('consistency-auditor');
+  assert.equal(au.flat.edit, 'deny'); assert.equal(au.edit.length, 0);
+  for (const sub of ['check --strict', 'state', 'impact']) assert.equal(decide(au.bash, `node factory/scripts/project-lint.mjs ${sub} --root factory/worktrees/init-1`), 'allow', sub);
+  assert.equal(decide(au.bash, 'node factory/scripts/project-lint.mjs trace --write'), 'deny');
+});
+
+test('init: el modelo de cada agente es el de la decision D6 (tier resuelto en config.json)', () => {
+  for (const [a, tier] of Object.entries(INIT_ROLES)) {
+    const txt = fs.readFileSync(path.join(ROOT, '.opencode/agent', a + '.md'), 'utf8');
+    assert.equal(txt.match(/^model: (.+)$/m)[1], CONFIG.tiers[tier], `${a} debe usar ${tier}`);
+  }
+});
+
+test('init: roles de config.json — o los seis o ninguno (parche a medias = fallo)', () => {
+  assert.ok(rolesApplied === 0 || rolesApplied === 6, `parche a medias: ${rolesApplied} de 6 roles; aplica ${PATCH4} completo`);
+  assert.ok(fs.existsSync(path.join(ROOT, PATCH4)), PATCH4);
+});
+test('init: con el parche aplicado cada rol apunta al tier de D6 y apply-models --check no encuentra desajustes', { skip: missPatch(rolesApplied === 6) }, () => {
+  for (const [a, tier] of Object.entries(INIT_ROLES)) assert.equal(CONFIG.roles[a], tier, a);
+  const r = spawnSync('node', ['factory/scripts/apply-models.js', '--check'], { cwd: ROOT, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('init: los prompts nombran solo scripts y agentes que existen; /factory-init delega en discovery', () => {
+  for (const a of INIT_AGENTS) {
+    const txt = fs.readFileSync(path.join(ROOT, '.opencode/agent', a + '.md'), 'utf8');
+    for (const s of txt.match(/(?:factory\/scripts|01-TOOLS)\/[\w.-]+\.(?:sh|js|mjs)/g) || []) assert.ok(fs.existsSync(path.join(ROOT, s)), `${a}: ${s}`);
+    for (const t of txt.match(/factory\/templates\/project\/[\w.-]+\.md/g) || []) if (!t.includes('<')) assert.ok(fs.existsSync(path.join(ROOT, t)), `${a}: ${t}`);
+    if (a !== 'consistency-auditor') assert.match(txt, /(?:no|nunca)[^.\n]*aprobado|aprobaci[oó]n[^.\n]*humano|ejecuta el humano|project-lint approve/i, `${a}: debe decir que aprobar es del humano`);
+  }
+  const cmd = fs.readFileSync(path.join(ROOT, '.opencode/command/factory-init.md'), 'utf8');
+  assert.match(cmd, /^agent: discovery$/m); assert.match(cmd, /init-project\.sh/); assert.match(cmd, /HANDOFF=discovery/); assert.match(cmd, /MANUAL:/); assert.match(cmd, /\$ARGUMENTS/);
+  const disc = fs.readFileSync(path.join(ROOT, '.opencode/agent/discovery.md'), 'utf8');
+  for (const a of INIT_AGENTS.filter((x) => x !== 'discovery')) assert.match(disc, new RegExp(a));
+  assert.match(disc, /\[INVESTIGADO/); assert.match(disc, /no confiable/); assert.match(disc, /máximo 5/);
 });

@@ -58,6 +58,16 @@ test('--apply: copia la maquinaria y crea el Brain limpio', () => {
   assert.ok(fs.statSync(path.join(d, 'factory-agent')).mode & 0o111);
 });
 
+test('RF-I14: el destino recibe los seis agentes de /factory-init, el comando, el inicializador, el linter, las plantillas y el pin de RSC', () => {
+  const d = installed();
+  for (const f of ['.opencode/agent/discovery.md', '.opencode/agent/system-analyst.md', '.opencode/agent/domain-modeler.md', '.opencode/agent/architect.md', '.opencode/agent/deployment-planner.md', '.opencode/agent/consistency-auditor.md',
+    '.opencode/command/factory-init.md', 'factory/scripts/init-project.sh', 'factory/scripts/project-lint.mjs', 'factory/scripts/gen-index.mjs', 'factory/scripts/rsc-pin.sh', 'factory/rsc-pin.json',
+    'factory/templates/project/00-vision.md', 'factory/templates/project/discovery.md']) assert.ok(exists(d, f), `falta ${f}`);
+  assert.ok(fs.statSync(path.join(d, 'factory/scripts/init-project.sh')).mode & 0o111, 'init-project.sh ejecutable');
+  assert.ok(!exists(d, '02-DOCS/wiki/project'), 'el Brain del destino no hereda nada: la base documental la crea /factory-init');
+  assert.equal(sh([d, '--check']).status, 0);
+});
+
 test('--apply: nada de la fabrica viaja (ADR, constitucion, jobs, tests, harness RSC, parches)', () => {
   const d = installed(); const all = tree(d);
   assert.doesNotMatch(read(d, '02-DOCS/wiki/sdd/decisions.md'), /^## ADR-/m, 'decisions.md debe estar vacio de ADR');

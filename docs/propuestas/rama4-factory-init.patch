@@ -1,0 +1,18 @@
+diff --git a/factory/config.json b/factory/config.json
+--- a/factory/config.json
++++ b/factory/config.json
+@@ -19,7 +19,13 @@
+     "human-gate": "go-approver",
+     "memory-curator": "sol",
+     "intake": "astra",
+-    "orchestrator": "opus"
++    "orchestrator": "opus",
++    "discovery": "go-approver",
++    "system-analyst": "sol",
++    "domain-modeler": "sol",
++    "architect": "go-approver",
++    "deployment-planner": "sol",
++    "consistency-auditor": "go-security"
+   },
+   "max_rounds": 3,
+   "max_diff_lines": 400,
