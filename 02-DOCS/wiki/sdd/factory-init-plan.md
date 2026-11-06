@@ -79,7 +79,7 @@ Cada rama termina con: lista de commits, resultado de `node --test tests/*.test.
 - [x] Rama 0 — plan y especificación
 - [x] Rama 1 — `feat/project-docs-base` (plantillas, `project-lint`, `gen-index`; 553 tests en verde; 39 mutaciones detectadas)
 - [x] Rama 2 — `feat/brain-requests` (apilada sobre la rama 1 hasta que se fusione; parche en `docs/propuestas/rama2-brain-requests.patch`, pendiente de aplicar por el humano; 586 tests con el parche, 12 saltados sin él)
-- [ ] Rama 3
+- [x] Rama 3 — `feat/rsc-pinned` (`rsc-pin.json`, `rsc-pin.sh` e integración en `install-into.sh`; sin parche para el humano; 608 tests en verde con `FORCE_COLOR=0` y `=1`, 1 saltado (prueba en vivo con `FACTORY_LIVE_RSC=1`, pasa); 27 mutaciones detectadas, 0 sobrevivieron). Medido en vivo con RSC 3.6.0: `sync` sí registra `auto-update`, pero RSC reescribe `opencode.json` (cambia `git push: deny`); `rsc-pin.sh` lo restaura y fija `gitPermissions=false`. Detalle en el §11 de la especificación
 - [ ] Rama 4
 - [ ] Rama 5
 - [ ] Rama 6
