@@ -121,3 +121,31 @@ Señales de que algo se hizo "a mano" (falso verde): `round-1/` no existe o sus 
 **Cuenta las acciones**: `next-step.sh` debe haber dicho cada paso. Si el orchestrator hizo algo que el script no pidió (escribir un artefacto, lanzar reviewers por Task), anótalo: es un fallo del prompt, no del flujo. Si un rol no respeta `VERDICT/SCORE`, sube **solo ese rol** de tier en `factory/config.json` (cambio tuyo).
 
 Anota cualquier bloqueo inesperado con el comando exacto.
+
+## 10. Prueba futura: instalar la fábrica en otro proyecto (PENDIENTE, no ejecutada)
+
+**Estado:** pendiente. La hace el humano; ningún agente la ha ejecutado.
+
+**Ya verificado (no hace falta repetirlo aquí):** `tests/install-into.test.mjs` (instalador en directorios temporales: dry-run, `--apply`, `--check`, conflictos, `--engine`, skills de terceros, `skills-lock.json`, sin `RF-F` en el destino), 9 mutaciones detectadas, e integración con `next-step.sh` (`DELEGATE: @intake` en un destino instalado). Además, `opencode debug skill` en un destino instalado carga las 4 skills de terceros desde `<destino>/.agents/skills/`.
+
+**No verificado:** un job real (`/factory`) de punta a punta en un proyecto instalado, con modelos reales y un PR en borrador.
+
+**Antes de empezar:** un repo git de prueba (no esta fábrica) con al menos un commit en `main` y el árbol limpio. Guía completa y qué instala: `docs/ONBOARDING.md` sección 3.
+
+1. Instalar y comprobar:
+   ```bash
+   bash factory/scripts/install-into.sh /ruta/prueba                        # dry-run: no escribe nada
+   bash factory/scripts/install-into.sh /ruta/prueba --apply --name prueba
+   bash factory/scripts/install-into.sh /ruta/prueba --check                # exit 0; avisos RELLENAR hasta el paso 2
+   ```
+2. En el destino: rellenar `02-DOCS/wiki/context.md` y `02-DOCS/wiki/sdd/constitution.md`; commit de la instalación en `main`. Si no usa `npm test`, definir `FACTORY_TEST_CMD`.
+3. Skills: `cd /ruta/prueba && opencode debug skill` (tarda ~100 s). Deben salir `code-review`, `differential-review`, `receiving-code-review` y `test-driven-development` desde `.agents/skills/`.
+4. Job mínimo: `/factory "<tarea pequeña, Surface: none>"` y repetir lo de la sección 4 (artefactos del job, `validate-artifacts.sh`, `next-step.sh` hasta `DONE`/`STOP: HUMAN_CREATE_PR`).
+
+**Criterio de éxito:**
+- El job termina con PR en borrador desde `factory/<job-id>`, y el PR incluye `02-DOCS/wiki/jobs/<job-id>.md`.
+- El spec-writer usó `context.md` (aparece en `trace.md` en la línea `Brain:`).
+- El check `ci` corre y **tú** haces el merge. No exijas `behavior-tests` fuera de `ai-factory`.
+- Después del job, `install-into.sh . --check` sigue en exit 0, y el destino no tiene `factory-requirements.md` ni `RF-F`.
+
+**Qué anotar:** el comando exacto y la salida de cada bloqueo; en qué paso se detuvo; si el guard bloqueó algo (`factory/logs/blocked.log`). Si el guard o un permiso bloquea una acción, se detiene el trabajo y se informa; no se rodea.
