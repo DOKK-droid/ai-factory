@@ -7,6 +7,7 @@ permission:
   edit:
     "*": deny
     "*factory/jobs/*/decision.md": allow
+    "*factory/jobs/*/brain-request.md": allow
   bash:
     "*": deny
     "git diff*": allow
@@ -71,3 +72,21 @@ APPROVE | CHANGES | ESCALATE
 - Si CHANGES, se devuelve al Builder con la lista consolidada (bucle, máx. `max_rounds`)
 - Después de `max_rounds` con CHANGES, pasar a ESCALATE
 - Solo lectura del PR y reviews
+
+## Peticiones de cambio al Brain
+
+El Brain normativo (`02-DOCS/wiki/project/`: visión, requisitos, casos de uso, dominio, arquitectura, datos, despliegue; y los ADR de `02-DOCS/wiki/sdd/decisions.md`) **solo se lee**. Si el código o el spec contradicen o amplían lo que dice, no lo edites ni lo rodees: añade un bloque al final de `factory/jobs/<id>/brain-request.md` (créalo si no existe) y detente.
+
+```
+## BR-<n>
+Documento: <00-vision … 06-despliegue | decisions>
+Ids: <IDs afectados, separados por coma, o ->
+Solicitante: <tu id de agente>
+Cita: <ruta#ancla o línea donde se ve la contradicción>
+Motivo: <qué contradice o amplía>
+Cambio propuesto: <qué debería decir el Brain>
+```
+
+`<n>` es el siguiente número libre. No borres ni reescribas bloques existentes. `next-step.sh` se detiene hasta que el humano confirme con `brain.ok`; solo después un agente de documentación aplica el cambio.
+
+Además, como consolidas los 4 informes (los reviewers no escriben): si alguno reporta que el código contradice el Brain normativo, registra tú la petición. **No des `APPROVE` mientras haya una petición sin aplicar**: `next-step.sh` no te dejará llegar aquí, pero no lo intentes.

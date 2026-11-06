@@ -58,3 +58,7 @@ SCORE: 0-1
 - Si `Surface: none` → `PASS (n/a)` (no hay interfaz que revisar)
 - Siempre se lanza (incluso si devuelve n/a)
 - Valor ambiguo → CHANGES
+
+## Brain normativo
+
+Si el diff contradice o amplía lo que dice el Brain normativo (`02-DOCS/wiki/project/` o un ADR), dilo en tu informe con la cita y pon `CHANGES`. Tú no escribes peticiones: las registra el approver.
