@@ -274,7 +274,7 @@ test('next-step 1b falla cerrado: una salida inesperada de brain-request.mjs es 
   for (const body of ["console.log('QUIZAS')", "console.log('')", 'process.exit(3)', "throw new Error('x')", "console.log('APPLY BR-1')", "console.log('APPLY BR-1\\nOWNER: builder')", "console.log('ALIGN\\nOWNER: architect\\nFILES: x')"]) {
     stub(body); const r = go(); assert.equal(r.kind, 'STOP', body); assert.equal(r.value, 'BRAIN_REQUEST_INVALID', body); assert.equal(r.code, 2);
   }
-  stub("console.log('NONE')"); r = go(); assert.equal(r.kind, 'DELEGATE'); assert.match(r.value, /^@builder/);
+  stub("console.log('NONE')"); const r = go(); assert.equal(r.kind, 'DELEGATE'); assert.match(r.value, /^@builder/);
 });
 test('next-step project_docs: valor inválido => PROJECT_INVALID; off/ausente no cambia el flujo', { skip: miss(nsPatched) }, () => {
   const bad = nsJob('job', { project: { project_docs: 'siempre' } }); const r = bad.ns(); assert.equal(r.value, 'PROJECT_INVALID'); assert.match(r.why.join(' '), /project_docs debe ser off o required/);
