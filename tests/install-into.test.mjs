@@ -128,6 +128,16 @@ test('un archivo existente que difiere es un conflicto: se lista, se para y --fo
   assert.equal(read(d, '02-DOCS/wiki/sdd/decisions.md'), '# Mis decisiones\n\n## ADR-001: Usar Postgres\n', 'el Brain del proyecto nunca se pisa');
 });
 
+test('el comando de comprobacion que se imprime y se escribe se lanza desde la fabrica y la copia instalada explica por que no puede con --check', () => {
+  const d = dest(); const r = sh([d, '--apply']); assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes(`bash ${REPO}/factory/scripts/install-into.sh ${fs.realpathSync(d)} --check`), r.stdout);
+  assert.doesNotMatch(r.stdout, /install-into\.sh \. --check/);
+  assert.doesNotMatch(read(d, '02-DOCS/wiki/context.md'), /install-into\.sh \. --check/);
+  assert.match(read(d, '02-DOCS/wiki/context.md'), /lanzado desde el repo de la fabrica/);
+  const own = run('bash', [path.join(d, 'factory/scripts/install-into.sh'), '.', '--check'], { cwd: d });
+  assert.equal(own.status, 1); assert.match(own.stderr, /propio repo de la fabrica/); assert.match(own.stderr, /usa la de la fabrica/);
+  assert.equal(sh([d, '--check']).status, 0);
+});
 test('--check: 0 tras instalar (con aviso de contexto sin rellenar); 1 si falta, difiere o se coló algo de la fabrica', () => {
   const d = installed();
   let r = sh([d, '--check']); assert.equal(r.status, 0, r.stdout); assert.match(r.stdout, /AVISO.*context\.md.*RELLENAR/);
