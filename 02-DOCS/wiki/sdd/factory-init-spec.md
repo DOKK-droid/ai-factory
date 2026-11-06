@@ -194,35 +194,29 @@ Dos clases de contenido:
 - **Ejecución**: página del job, trace, lecciones. Las escribe `memory-curator` sin confirmación; se revisan en el PR.
 - **Normativo**: REQ, UC, dominio, arquitectura, ADR. Solo los agentes de documentación escriben; builder, reviewers, approver, human-gate y orchestrator solo leen.
 
-Petición: `factory/jobs/<id>/brain-request.md`, un bloque por petición, todos los campos obligatorios:
+Petición: `factory/jobs/<id>/brain-request.md`, un bloque `## BR-n` por petición con los campos `Documento`, `Ids`, `Solicitante`, `Cita`, `Motivo` y `Cambio propuesto` (todos obligatorios; `Documento` es uno de los siete o `decisions`; `Ids` pertenecen a ese documento, o `-` si es contenido nuevo). Los escriben `builder`, `spec-writer` y `approver`; los reviewers no escriben: reportan el hallazgo en su informe con `CHANGES` y lo registra el approver. El builder además no puede escribir `02-DOCS/wiki/project/` ni `brain.ok` (antes podía: su permiso `edit` era `*: allow` con excepciones).
 
-```
-## BR-1
-Documento: 01-requisitos
-Ids: REQ-F-3
-Solicitante: builder
-Cita: src/cart.js#L40 | factory/jobs/<id>/spec.md#RF-2
-Motivo: el código contradice / amplía …
-Cambio propuesto: …
-```
+Toda la lógica vive en `factory/scripts/brain-request.mjs state`, que `next-step.sh` solo traduce (bloque 1b, tras el estado 1 y antes del 2). La primera palabra de su respuesta decide:
 
-Los agentes con permiso de edición sobre ese archivo (builder, spec-writer, approver, human-gate) lo escriben; los reviewers no escriben, ponen una línea `BRAIN_REQUEST: <motivo>` en su review y `launch-reviewers.sh` la copia como bloque (parche para el humano si toca `01-TOOLS`).
+| Respuesta | Qué hace `next-step.sh` |
+|---|---|
+| `NONE`, `DONE` | sigue el flujo normal |
+| `INVALID` o cualquier otra cosa (vacía, error de node) | `STOP: BRAIN_REQUEST_INVALID` (fallar hacia el lado seguro) |
+| `CONFIRM` | `STOP: HUMAN_CONFIRM_BRAIN`, con `CMD: touch factory/jobs/<id>/brain.ok`. Solo cuenta si `brain.ok` es más nuevo que la petición |
+| `APPLY BR-n` | `DELEGATE` al dueño del documento (`decisions` → `architect`) para editar en la worktree |
+| `COMMIT [BR-n]` | `RUN` de `commit-brain.sh <id> --project [BR-n]`: commit acotado a `02-DOCS/wiki/project/` y `decisions.md`; con BR-n lleva la línea `Brain-Request: BR-n` |
+| `ALIGN` | `DELEGATE` al dueño de un documento aprobado que `project-lint` marca con errores tras el cambio |
+| `REAPPROVE` | `STOP: HUMAN_CONFIRM_PROJECT` con el `CMD` de `project-lint approve` para los documentos desactualizados |
 
-Flujo en `next-step.sh` (tras el estado 1, antes de cualquier avance):
+«Aplicada» = existe un commit con `Brain-Request: BR-n` entre la base del job y `HEAD`; así una petición con el mismo número en otro job no cuenta. Solo se vigilan los documentos que ya tienen aprobación registrada: un error en un borrador no genera `ALIGN`. Los commits que solo tocan la base documental no cuentan como trabajo del builder (estado 4) ni invalidan el gate (`lib.sh`), y no hace falta que figuren en `Alcance:`; su aprobación es humana (`project.ok`). El approver no llega a `APPROVE` con una petición pendiente porque el bloque 1b se evalúa antes que el estado 8 en cada llamada.
 
-1. Bloque con campos que faltan: `STOP: BRAIN_REQUEST_INVALID`.
-2. Sin `brain.ok` más reciente que la petición: `STOP: HUMAN_CONFIRM_BRAIN`, con `CMD: touch factory/jobs/<id>/brain.ok`.
-3. Con `brain.ok` y petición sin aplicar: `DELEGATE` al propietario del documento (§4.4) para editar en la worktree del job.
-4. Cambios de proyecto sin confirmar: `RUN: bash 01-TOOLS/commit-brain.sh <id> --project BR-n` (commit acotado a `02-DOCS/wiki/project/` y `decisions.md`, con la línea `Brain-Request: BR-n`).
-5. «Aplicada» = existe un commit con esa línea en la rama del job. Después `project-lint check` realinea; si los documentos afectados quedaron `DESACTUALIZADO`, `STOP: HUMAN_CONFIRM_PROJECT` con el `CMD` de `approve`.
-
-El approver no puede dar `APPROVE` con una petición pendiente: lo impide el estado 1, que se evalúa antes del 8 en cada llamada; el prompt se lo recuerda, pero la garantía es el script.
+Riesgo residual: los tres agentes con permiso sobre `brain-request.md` podrían borrarlo; OpenCode no ofrece permiso de «solo añadir». Las peticiones aplicadas quedan en el historial de git.
 
 Cambios de proyecto sin job (requisitos nuevos, rediseños): se hacen con un job de documentación (RF-I9).
 
 ## 8. Política `project_docs`
 
-`factory/project.json`: `"project_docs": "off" | "required"`; ausente = `off`. Con `required` y un job que no es `kind: docs`, `next-step.sh` ejecuta `project-lint gate` antes del estado 2 y, si falla, `STOP: HUMAN_CONFIRM_PROJECT` con `WHY:` tomado de `state` y `CMD: node factory/scripts/project-lint.mjs approve <documentos>` (lo ejecuta el humano). Un valor inválido es `PROJECT_INVALID` (fallar hacia el lado seguro). `/factory-init` termina imprimiendo el diff de una línea que pone `required`; lo aplica el humano.
+`factory/project.json`: `"project_docs": "off" | "required"`; ausente = `off`. Con `required` (y, desde la rama 6, un job que no es `kind: docs`), `next-step.sh` ejecuta `project-lint gate --root <worktree>` antes del estado 2 (bloque 1c) y, si falla, `STOP: HUMAN_CONFIRM_PROJECT` con el resultado del gate en `WHY:` y, solo si hay documentos en estado `LISTO`, `CMD: node factory/scripts/project-lint.mjs approve <esos documentos>` (lo ejecuta el humano; el guard impide que lo ejecute un agente). Un valor inválido es `PROJECT_INVALID` (fallar hacia el lado seguro). `/factory-init` termina imprimiendo el diff de una línea que pone `required`; lo aplica el humano.
 
 ## 9. `init-project.sh`
 

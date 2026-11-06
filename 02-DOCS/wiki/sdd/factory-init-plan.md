@@ -12,7 +12,7 @@ Las ramas no usan el prefijo `factory/`: el hook `pre-commit` solo deja commitea
 |---|---|---|---|---|
 | 0 | `docs/factory-init-plan` | este plan y la especificación | — | — |
 | 1 | `feat/project-docs-base` | plantillas, `project-lint.mjs`, `gen-index.mjs` | — | — |
-| 2 | `feat/brain-requests` | `brain-request.md`, `brain.ok`, `project_docs` y `HUMAN_CONFIRM_*` | 1 | `next-step.sh`, `command-guard.mjs`, `lib.sh`/`scope-check.mjs` (rutas), prompts |
+| 2 | `feat/brain-requests` | `brain-request.md`, `brain.ok`, `project_docs` y `HUMAN_CONFIRM_*` | 1 (apilada) | `next-step.sh`, `command-guard.mjs`, `lib.sh`/`scope-check.mjs` (rutas), prompts |
 | 3 | `feat/rsc-pinned` | `rsc-pin.sh` y RSC fijado en el instalador | — | — |
 | 4 | `feat/factory-init` | 6 agentes, `/factory-init`, `init-project.sh` | 1, 2, 3 | `factory/config.json` |
 | 5 | `feat/project-traceability` | `Implementa:` en spec y página del job, `project-status` | 1, 2 | `next-step.sh` (`brain_problem`) |
@@ -78,7 +78,7 @@ Cada rama termina con: lista de commits, resultado de `node --test tests/*.test.
 
 - [x] Rama 0 — plan y especificación
 - [x] Rama 1 — `feat/project-docs-base` (plantillas, `project-lint`, `gen-index`; 553 tests en verde; 39 mutaciones detectadas)
-- [ ] Rama 2
+- [x] Rama 2 — `feat/brain-requests` (apilada sobre la rama 1 hasta que se fusione; parche en `docs/propuestas/rama2-brain-requests.patch`, pendiente de aplicar por el humano; 586 tests con el parche, 12 saltados sin él)
 - [ ] Rama 3
 - [ ] Rama 4
 - [ ] Rama 5
