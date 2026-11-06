@@ -49,7 +49,7 @@ function seedProject(f, { approve = true } = {}) {
   for (const rel of ['README.md', ...DOC_NAMES.map((d) => `02-DOCS/wiki/project/${d}.md`), '02-DOCS/wiki/project/discovery.md', '02-DOCS/wiki/sdd/decisions.md']) {
     write(path.join(f.repo, rel), fs.readFileSync(path.join(p.root, rel), 'utf8'));
   }
-  if (approve) { const r = run('node', [LINT, 'approve', ...DOC_NAMES, '--root', f.repo]); assert.equal(r.status, 0, r.stdout); }
+  if (approve) { const docs = Array.isArray(approve) ? approve : DOC_NAMES; const r = run('node', [LINT, 'approve', ...docs, '--root', f.repo]); assert.equal(r.status, 0, r.stdout); }
   git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-qm', 'base documental'); git(f.repo, 'push', '-q', 'origin', 'main');
 }
 const edit = (file, from, to) => { const t = fs.readFileSync(file, 'utf8'); assert.ok(t.includes(from), `no contiene: ${from}`); fs.writeFileSync(file, t.replace(from, to)); };
@@ -147,6 +147,17 @@ test('state: base documental aprobada => ALIGN al dueño del documento afectado,
   assert.equal(st().kind, 'COMMIT'); assert.equal(f.cbp('--project').status, 0);
   assert.equal(st().first, 'DONE', st().raw);
   assert.equal(run('node', [LINT, 'gate', '--root', f.wt]).status, 0);
+});
+test('state: un error en un documento que aún no está aprobado no es motivo de ALIGN (solo se vigila la base ya aprobada)', () => {
+  const f = fx({ tools: true }); seedProject(f, { approve: ['00-vision'] });
+  write(path.join(f.repo, '02-DOCS/wiki/project/04-arquitectura.md'), fs.readFileSync(path.join(f.repo, '02-DOCS/wiki/project/04-arquitectura.md'), 'utf8') + 'Cubre REQ-NF-99.\n');
+  git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-qm', 'borrador con error'); git(f.repo, 'push', '-q', 'origin', 'main');
+  f.upTo('job'); f.base = JSON.parse(fs.readFileSync(path.join(f.job, 'job.json'), 'utf8')).base; f.cbp = (...a) => run('bash', [COMMIT_BRAIN, f.id, ...a], { cwd: f.wt, env: f.env() });
+  put(path.join(f.job, 'brain-request.md'), HEADER + BLOCK(1, { doc: '03-dominio', ids: '-' })); put(path.join(f.job, 'brain.ok'), '');
+  assert.match(run('node', [LINT, 'check', '--root', f.wt]).stdout, /PL020 E 04-arquitectura.*REQ-NF-99/);   // el error existe...
+  fs.appendFileSync(path.join(f.wt, '02-DOCS/wiki/project/03-dominio.md'), '\nNota. [FUENTE: README.md#Alcance]\n'); assert.equal(f.cbp('--project', 'BR-1').status, 0);
+  const r = run('node', [BR_MJS, 'state', '--job-dir', f.job, '--job-id', f.id, '--worktree', f.wt, '--base', f.base], { cwd: f.repo });
+  assert.equal(r.stdout.split('\n')[0], 'DONE', r.stdout);   // ...pero no pertenece a la base aprobada
 });
 test('state falla cerrado: base git ilegible, argumentos que faltan o job-id inválido => INVALID, nunca NONE/DONE', () => {
   const f = job(); f.request(HEADER + BLOCK(1)); f.ok();
@@ -266,6 +277,18 @@ test('next-step: el approver no llega a APPROVE ni al push con una petición pen
   const f = nsJob('humanized'); assert.equal(f.ns().kind, 'DELEGATE');   // sin petición, el flujo normal sigue (aquí pide trace)
   put(path.join(f.job, 'brain-request.md'), HEADER + BLOCK(1)); const r = f.ns(); assert.equal(r.value, 'HUMAN_CONFIRM_BRAIN');
   assert.doesNotMatch(r.raw, /git push/);
+});
+test('next-step 1b: tras aplicar una petición sobre una base aprobada => DELEGATE de alineación y STOP HUMAN_CONFIRM_PROJECT con el CMD de aprobación', { skip: miss(nsPatched) }, () => {
+  const f = nsJob('confirmed', { seed: true }); put(path.join(f.job, 'brain-request.md'), HEADER + BLOCK(1)); put(path.join(f.job, 'brain.ok'), '');
+  const req = path.join(f.wt, '02-DOCS/wiki/project/01-requisitos.md');
+  edit(req, 'listar los pedidos.', 'listar y filtrar los pedidos.'); edit(req, 'estado: aprobado', 'estado: desactualizado'); edit(req, 'version: 0.1.0', 'version: 0.2.0');
+  const cb = (...a) => run('bash', [COMMIT_BRAIN, f.id, ...a], { cwd: f.wt, env: f.env() });
+  let r = f.ns(); assert.equal(r.kind, 'RUN'); assert.match(r.value, /commit-brain\.sh job-1 --project BR-1$/); assert.equal(cb('--project', 'BR-1').status, 0);
+  r = f.ns(); assert.equal(r.kind, 'DELEGATE'); assert.equal(r.value.split(' | ').length, 3, r.first); assert.match(r.value, /^@system-analyst \| alinear 02-casos-de-uso .* \| factory\/worktrees\/job-1\/02-DOCS\/wiki\/project\/02-casos-de-uso\.md$/); assert.match(r.why.join(' '), /PL051/);
+  edit(path.join(f.wt, '02-DOCS/wiki/project/02-casos-de-uso.md'), 'estado: aprobado', 'estado: desactualizado'); assert.equal(f.ns().kind, 'RUN'); assert.equal(cb('--project').status, 0);
+  r = f.ns(); assert.equal(r.kind, 'STOP'); assert.equal(r.value, 'HUMAN_CONFIRM_PROJECT'); assert.equal(r.code, 2); assert.deepEqual(r.cmd, ['cd factory/worktrees/job-1 && node factory/scripts/project-lint.mjs approve 01-requisitos 02-casos-de-uso']);
+  assert.equal(run('node', [LINT, 'approve', '01-requisitos', '02-casos-de-uso', '--root', f.wt]).status, 0); assert.equal(f.ns().kind, 'RUN'); assert.equal(cb('--project').status, 0);
+  r = f.ns(); assert.equal(r.kind, 'DELEGATE'); assert.match(r.value, /^@builder/);   // todo alineado y aprobado: el flujo normal sigue
 });
 test('next-step 1b falla cerrado: una salida inesperada de brain-request.mjs es un STOP', { skip: miss(nsPatched) }, () => {
   const f = nsJob('confirmed'); const copy = tmp('af-ns-copy-'); fs.cpSync(path.join(REPO, '01-TOOLS'), path.join(copy, '01-TOOLS'), { recursive: true }); fs.cpSync(path.join(REPO, 'factory/scripts'), path.join(copy, 'factory/scripts'), { recursive: true });
