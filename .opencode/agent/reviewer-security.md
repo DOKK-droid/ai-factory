@@ -63,3 +63,7 @@ SCORE: 0-1
 - Si `Surface: none`, aún así revisas seguridad del backend
 - Valor ambiguo → CHANGES (fallar hacia el lado seguro)
 - Usar differential-review para hallazgos de seguridad críticos
+
+## Brain normativo
+
+Si el diff contradice o amplía lo que dice el Brain normativo (`02-DOCS/wiki/project/` o un ADR), dilo en tu informe con la cita y pon `CHANGES`. Tú no escribes peticiones: las registra el approver.

@@ -19,6 +19,8 @@ export const PROTECTED_PATHS = [
   '01-TOOLS/launch-reviewers.sh', '01-TOOLS/validate-artifacts.sh', '01-TOOLS/next-step.sh', '01-TOOLS/commit-brain.sh',
   // politica del proyecto que lee next-step.sh (el Brain aconseja; esto decide y solo lo cambia el humano)
   'factory/project.json',
+  // aprobacion humana de la base documental: la escribe `project-lint approve`, que ejecuta el humano
+  '02-DOCS/wiki/project/project.ok',
   // lanzadores y reglas de conducta
   'factory-agent', 'factory-maint', 'AGENTS.md',
   // auditoria del guard: el agente puede leerla, no editarla ni resetear el modo parada
@@ -26,17 +28,19 @@ export const PROTECTED_PATHS = [
 ];
 
 /** Palabras que un agente no tiene motivo para escribir: abren puertas traseras al guard o a los hooks. */
+// Aprobar la base documental es del humano (escribe project.ok): un agente no ejecuta `project-lint approve`.
+const APPROVE_RE = /project-lint(?:\.mjs)?\b[^|;&\n]*\bapprove\b/;
 const BACKDOOR_RE = /factory-maint|FACTORY_GUARD_ALLOW_PROTECTED_EDIT|FACTORY_HUMAN\b|FACTORY_REQUIRE_SPEC_OK/;
 const INTERPRETERS = new Set(['python', 'python3', 'node', 'nodejs', 'deno', 'bun', 'perl', 'ruby', 'php', 'lua', 'pwsh', 'powershell']);
 const ENV_MENTION_RE = /(^|[^\w])\.env(?!\w)(?![.\w]*(?:example|sample|template))/;
 
 /** Ruta de destino protegida? Los directorios (terminan en "/") por prefijo; los archivos por nombre exacto. */
 /** Evidencia del pipeline: solo la escriben los scripts (checks.sh, launch-reviewers.sh), nunca un agente a mano. */
-// Incluye las marcas del humano (spec.ok, review.ok, pr.url) y el commit revisado de cada ronda (.commit).
-const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|spec\.ok|review\.ok|pr\.url|round-[^/]+\/(review-[^/]+\.md|\.commit))$/;
+// Incluye las marcas del humano (spec.ok, review.ok, brain.ok, pr.url) y el commit revisado de cada ronda (.commit).
+const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|spec\.ok|review\.ok|brain\.ok|pr\.url|round-[^/]+\/(review-[^/]+\.md|\.commit))$/;
 export function isProtectedPath(target) {
   const t = String(target).replace(/\\/g, '/').replace(/^\.\//, '');
-  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md, round-N/review-*.md, round-N/.commit (los escriben checks.sh y launch-reviewers.sh) o las marcas spec.ok / review.ok / pr.url (las crea el humano)';
+  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md, round-N/review-*.md, round-N/.commit (los escriben checks.sh y launch-reviewers.sh) o las marcas spec.ok / review.ok / brain.ok / pr.url (las crea el humano)';
   return PROTECTED_PATHS.find((p) => (p.endsWith('/') ? t.startsWith(p) || t.includes('/' + p) : t === p || t.endsWith('/' + p)));
 }
 /** El texto (codigo de un intérprete) menciona rutas protegidas o archivos .env? */
@@ -427,6 +431,9 @@ export function classifyBash(command, opts = {}, depth = 0) {
   if (depth > MAX_DEPTH) return block('Comando demasiado anidado. Bloqueado por seguridad.');
   if (!opts.allowProtected && BACKDOOR_RE.test(command)) {
     return grave('Mencionar factory-maint, FACTORY_GUARD_ALLOW_PROTECTED_EDIT, FACTORY_HUMAN o FACTORY_REQUIRE_SPEC_OK esta prohibido para agentes: desactivan las protecciones.');
+  }
+  if (!opts.allowProtected && APPROVE_RE.test(command)) {
+    return grave('Aprobar la base documental (project-lint approve) es una decision del humano: pidesela, no la ejecutes.');
   }
   const { text, bodies, interpBodies } = splitHeredocs(command);
   if (!opts.allowProtected) {

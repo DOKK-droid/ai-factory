@@ -41,10 +41,13 @@ factory_merge_base() {
 # Paginas del Brain que SOLO escribe el memory-curator (y que viajan en el PR del job). Lista duplicada en
 # factory/scripts/scope-check.mjs (CURATOR_PATHS): un test comprueba que coinciden.
 FACTORY_CURATOR_PATHS=(02-DOCS/wiki/jobs 02-DOCS/wiki/index.md 02-DOCS/wiki/sdd/decisions.md)
+# Base documental del proyecto: la escribe un agente de documentacion tras una peticion confirmada. Sus commits tampoco invalidan el
+# gate ni los reviews: esa documentacion la aprueba el humano (project.ok), no los reviewers. Duplicada en scope-check.mjs (PROJECT_DOC_PATHS).
+FACTORY_PROJECT_DOC_PATHS=(02-DOCS/wiki/project)
 
 # factory_curator_pathspec: argumentos de git para EXCLUIR las paginas del curator de un diff o un log.
 factory_curator_excludes() {
-  local p; for p in "${FACTORY_CURATOR_PATHS[@]}"; do printf '%s\n' ":(exclude)${p}"; done
+  local p; for p in "${FACTORY_CURATOR_PATHS[@]}" "${FACTORY_PROJECT_DOC_PATHS[@]}"; do printf '%s\n' ":(exclude)${p}"; done
 }
 
 # factory_commit_fresh <sha> [head] [dir]: 0 si <sha> sigue vigente respecto a <head> (por defecto HEAD):

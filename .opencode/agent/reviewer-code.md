@@ -64,3 +64,7 @@ SCORE: 0-1
 - Si se modificaron tests para hacerlos pasar (sin mejorar código) → CHANGES
 - Valor ambiguo → CHANGES
 - Usar code-review para revisión de calidad de código
+
+## Brain normativo
+
+Si el diff contradice o amplía lo que dice el Brain normativo (`02-DOCS/wiki/project/` o un ADR), dilo en tu informe con la cita y pon `CHANGES`. Tú no escribes peticiones: las registra el approver.

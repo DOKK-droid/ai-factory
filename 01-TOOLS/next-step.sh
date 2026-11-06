@@ -19,11 +19,14 @@
 #   { "require_spec_ok": true, "max_rounds": 3, "human_review_surfaces": ["page"], "spec_profile": "full",
 #     "brain": { "default": ["02-DOCS/wiki/index.md"], "agents": { "spec-writer": ["02-DOCS/wiki/sdd/decisions.md"] } } }
 #   spec_profile: "standard" (por defecto) o "full" (Actores, RF-n, Diseño, ADR, trazabilidad y pagina del job en el Brain).
+#   project_docs: "off" (por defecto) o "required": con required el job no pasa del estado 1 mientras `project-lint gate` falle
+#   (la base documental del proyecto, 02-DOCS/wiki/project/, debe estar aprobada y fresca).
 #   Sin el archivo: spec.ok exigido, max_rounds de factory/config.json (o 3), sin superficies que exijan humano.
 #   FACTORY_REQUIRE_SPEC_OK=0 (entorno del humano; el guard prohibe a los agentes escribirlo) desactiva spec.ok.
 #
 # Marcas del humano (las crea el humano con `touch`; el guard impide que un agente las cree):
-#   spec.ok (spec confirmado), review.ok (superficie que exige revision humana), pr.url (PR creado a mano).
+#   spec.ok (spec confirmado), review.ok (superficie que exige revision humana), pr.url (PR creado a mano),
+#   brain.ok (peticion de cambio al Brain normativo confirmada; ver factory/scripts/brain-request.mjs).
 #
 # Obsolescencia atada al commit: gate.md lleva `COMMIT: <sha>` y round-N/.commit el sha revisado; si HEAD de la
 # worktree es otro, el artefacto es OBSOLETO (salvo que lo posterior solo toque paginas del curator: factory_commit_fresh). decision.md y human.md se consideran vigentes solo si son MAS
@@ -32,6 +35,8 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPEC_LINT="${HERE}/../factory/scripts/spec-lint.mjs"
+BRAIN_REQ="${HERE}/../factory/scripts/brain-request.mjs"
+PROJECT_LINT="${HERE}/../factory/scripts/project-lint.mjs"
 
 if [ "${1:-}" = "--new-id" ]; then
   # Con frase: slug determinista (sin LLM) de sus primeras palabras clave + fecha + 4 hex para que no choque.
@@ -87,7 +92,7 @@ done_() { echo "DONE"; STATE=14; meta; [ -z "${1:-}" ] || echo "WHY: $1"; exit 0
 
 # ---------- politica del proyecto (factory/project.json) ----------
 declare -A BRAIN_AGENT=(); BRAIN_DEFAULT=()
-REQUIRE_SPEC_OK=1; MAX_ROUNDS=3; HUMAN_SURFACES=""; SPEC_PROFILE=standard
+REQUIRE_SPEC_OK=1; MAX_ROUNDS=3; HUMAN_SURFACES=""; SPEC_PROFILE=standard; PROJECT_DOCS=off
 POLICY="$(node -e '
   const fs = require("fs"); const [pf, cf] = process.argv.slice(1);
   const bad = (m) => { process.stdout.write("INVALID " + m + "\n"); process.exit(0); };
@@ -103,13 +108,15 @@ POLICY="$(node -e '
   if (sp !== "standard" && sp !== "full") bad("spec_profile debe ser standard o full");
   const hs = o.human_review_surfaces === undefined ? [] : o.human_review_surfaces;
   if (!Array.isArray(hs) || hs.some((x) => typeof x !== "string" || !/^[A-Za-z0-9_-]+$/.test(x))) bad("human_review_surfaces debe ser una lista de nombres");
+  const pd = o.project_docs === undefined ? "off" : o.project_docs;
+  if (pd !== "off" && pd !== "required") bad("project_docs debe ser off o required");
   const okPage = (x) => typeof x === "string" && /^[A-Za-z0-9._\/-]+$/.test(x) && !x.startsWith("/") && !x.split("/").includes("..");
   const br = o.brain === undefined ? {} : o.brain;
   const def = br.default === undefined ? ["02-DOCS/wiki/index.md"] : br.default;
   const ag = br.agents === undefined ? {} : br.agents;
   if (!Array.isArray(def) || !def.every(okPage)) bad("brain.default debe ser una lista de rutas relativas");
   if (typeof ag !== "object" || ag === null || Array.isArray(ag)) bad("brain.agents debe ser un objeto");
-  const out = ["OK", "REQUIRE_SPEC_OK=" + (req ? 1 : 0), "MAX_ROUNDS=" + mr, "HUMAN_SURFACES=" + hs.join(","), "SPEC_PROFILE=" + sp, "BRAIN_DEFAULT=" + def.join(" ")];
+  const out = ["OK", "REQUIRE_SPEC_OK=" + (req ? 1 : 0), "MAX_ROUNDS=" + mr, "HUMAN_SURFACES=" + hs.join(","), "SPEC_PROFILE=" + sp, "PROJECT_DOCS=" + pd, "BRAIN_DEFAULT=" + def.join(" ")];
   for (const [k, v] of Object.entries(ag)) {
     if (!/^[a-z-]+$/.test(k) || !Array.isArray(v) || !v.every(okPage)) bad("brain.agents." + k + " invalido");
     out.push("BRAIN_AGENT:" + k + "=" + v.join(" "));
@@ -127,6 +134,7 @@ while IFS= read -r l; do
     MAX_ROUNDS=*) MAX_ROUNDS="${l#*=}" ;;
     HUMAN_SURFACES=*) HUMAN_SURFACES="${l#*=}" ;;
     SPEC_PROFILE=*) SPEC_PROFILE="${l#*=}" ;;
+    PROJECT_DOCS=*) PROJECT_DOCS="${l#*=}" ;;
     BRAIN_DEFAULT=*) read -r -a BRAIN_DEFAULT <<< "${l#*=}" ;;
     BRAIN_AGENT:*) k="${l#BRAIN_AGENT:}"; BRAIN_AGENT["${k%%=*}"]="${k#*=}" ;;
   esac
@@ -161,6 +169,37 @@ BASE_NAME="${JOB_BASE#origin/}"
 STATE=1
 nonempty "${JOB_DIR}/input.md" || delegate intake "normalizar la tarea del humano (texto, issue o error)" "factory/jobs/${JOB_ID}/input.md" "falta input.md (o esta vacio)"
 
+# ---------- 1b. peticiones de cambio al Brain normativo (brain-request.md) ----------
+# Toda la logica vive en factory/scripts/brain-request.mjs; aqui solo se traduce la primera palabra de su respuesta.
+# Cualquier respuesta que no sea una de las listadas (vacia, error de node, texto raro) es un STOP: fail-closed.
+STATE=brain
+BRS="$(node "$BRAIN_REQ" state --job-dir "$JOB_DIR" --job-id "$JOB_ID" --worktree "$WT" --base "$JOB_BASE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')"
+BR_FIRST="$(printf '%s\n' "$BRS" | head -1)"
+br() { printf '%s\n' "$BRS" | sed -n "s/^$1: //p"; }   # valor(es) de la linea "CLAVE: valor"
+case "$BR_FIRST" in
+  NONE|DONE) ;;
+  CONFIRM) stop HUMAN_CONFIRM_BRAIN "$(br WHY)" "$(br CMD)" ;;
+  "APPLY BR-"*|ALIGN)
+    [ -n "$(br OWNER)" ] && [ -n "$(br FILES)" ] && [ -n "$(br WHAT)" ] || stop BRAIN_REQUEST_INVALID "brain-request.mjs no indico agente, archivo o tarea para '${BR_FIRST}'"
+    delegate "$(br OWNER)" "$(br WHAT)" "$(br FILES)" "$(br WHY | paste -sd';' - | sed 's/;/; /g')" ;;
+  COMMIT) [ -n "$(br CMD)" ] || stop BRAIN_REQUEST_INVALID "brain-request.mjs pidio un commit sin comando"
+    run_ "$(br CMD)" "$(br WHY)" ;;
+  REAPPROVE) stop HUMAN_CONFIRM_PROJECT "$(br WHY)" "$(br CMD)" ;;
+  INVALID) stop BRAIN_REQUEST_INVALID "$(br WHY)" ;;
+  *) stop BRAIN_REQUEST_INVALID "brain-request.mjs devolvio una respuesta inesperada ('$(printf '%s' "$BR_FIRST" | cut -c1-60)'); no avanzo" ;;
+esac
+
+# ---------- 1c. politica project_docs: la base documental aprobada antes del primer spec ----------
+if [ "$PROJECT_DOCS" = "required" ]; then
+  STATE=project
+  if ! PG="$(node "$PROJECT_LINT" gate --root "$WT" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"; then
+    PG_LISTO="$(printf '%s\n' "$PG" | sed -n 's/^GATE \([0-9][0-9]-[a-z-]*\): LISTO$/\1/p' | paste -sd' ' -)"
+    stop HUMAN_CONFIRM_PROJECT "project_docs=required: la base documental del proyecto no esta aprobada y fresca.
+$(printf '%s\n' "$PG" | head -12)
+Completala con /factory-init; el humano aprueba cada documento listo con el CMD (si lo hay)." ${PG_LISTO:+"node factory/scripts/project-lint.mjs approve ${PG_LISTO}"}
+  fi
+fi
+
 # ---------- 2. spec + tasks ----------
 STATE=2
 SPEC="${JOB_DIR}/spec.md"; TASKS="${JOB_DIR}/tasks.md"
@@ -192,7 +231,8 @@ fi
 
 # ---------- 4. el builder ha commiteado algo? ----------
 STATE=4
-NCOMMITS="$(git --no-optional-locks -C "$ROOT" rev-list --count "${JOB_BASE}..${HEAD_SHA}" 2>/dev/null)" || stop BASE_UNKNOWN "no pude contar los commits del job sobre ${JOB_BASE}"
+# Los commits que solo tocan la base documental (peticiones aplicadas, 1b) no son trabajo del builder.
+NCOMMITS="$(git --no-optional-locks -C "$ROOT" rev-list --count "${JOB_BASE}..${HEAD_SHA}" -- . ':(exclude)02-DOCS/wiki/project' ':(exclude)02-DOCS/wiki/sdd/decisions.md' 2>/dev/null)" || stop BASE_UNKNOWN "no pude contar los commits del job sobre ${JOB_BASE}"
 [ "$NCOMMITS" -gt 0 ] || delegate builder "implementar el spec con TDD y commitear (solo en la worktree)" "factory/worktrees/${JOB_ID}/" "la worktree no tiene commits sobre ${JOB_BASE}"
 
 # ---------- 5. gate vigente ----------

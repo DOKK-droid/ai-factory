@@ -48,7 +48,10 @@ export function globToRegExp(glob) {
 // Paginas del Brain que escribe el memory-curator: viajan en el PR del job sin tener que figurar en `Alcance:`.
 // Duplicada en 01-TOOLS/lib.sh (FACTORY_CURATOR_PATHS); un test comprueba que coinciden.
 export const CURATOR_PATHS = ['02-DOCS/wiki/jobs', '02-DOCS/wiki/index.md', '02-DOCS/wiki/sdd/decisions.md'];
-const isCurator = (p) => CURATOR_PATHS.some((c) => norm(p) === c || norm(p).startsWith(c + '/'));
+// Base documental del proyecto: la aplica un agente de documentacion tras una peticion confirmada (brain.ok); no tiene que figurar
+// en `Alcance:`. El builder no puede escribirla (permisos del agente). Duplicada en 01-TOOLS/lib.sh (FACTORY_PROJECT_DOC_PATHS).
+export const PROJECT_DOC_PATHS = ['02-DOCS/wiki/project'];
+const isCurator = (p) => [...CURATOR_PATHS, ...PROJECT_DOC_PATHS].some((c) => norm(p) === c || norm(p).startsWith(c + '/'));
 
 const TOO_BROAD = new Set(['*', '**', '**/*', '/', '.', './']);
 

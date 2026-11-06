@@ -38,6 +38,8 @@ permission:
     "*factory/jobs/*/job.json": deny
     "*factory/jobs/*/spec.ok": deny
     "*factory/jobs/*/review.ok": deny
+    "*factory/jobs/*/brain.ok": deny
+    "*02-DOCS/wiki/project/*": deny
     "*factory/jobs/*/pr.url": deny
   bash:
     "*": ask
@@ -95,3 +97,19 @@ Eres el Builder de la AI Factory. Implementas el Spec usando TDD estricto.
 - Commits en la branch
 - `factory/jobs/<id>/build.md` actualizado por tarea
 - PR listo para revisión
+
+## Peticiones de cambio al Brain
+
+El Brain normativo (`02-DOCS/wiki/project/`: visión, requisitos, casos de uso, dominio, arquitectura, datos, despliegue; y los ADR de `02-DOCS/wiki/sdd/decisions.md`) **solo se lee**. Si el código o el spec contradicen o amplían lo que dice, no lo edites ni lo rodees: añade un bloque al final de `factory/jobs/<id>/brain-request.md` (créalo si no existe) y detente.
+
+```
+## BR-<n>
+Documento: <00-vision … 06-despliegue | decisions>
+Ids: <IDs afectados, separados por coma, o ->
+Solicitante: <tu id de agente>
+Cita: <ruta#ancla o línea donde se ve la contradicción>
+Motivo: <qué contradice o amplía>
+Cambio propuesto: <qué debería decir el Brain>
+```
+
+`<n>` es el siguiente número libre. No borres ni reescribas bloques existentes. `next-step.sh` se detiene hasta que el humano confirme con `brain.ok`; solo después un agente de documentación aplica el cambio.
