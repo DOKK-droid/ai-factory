@@ -44,23 +44,22 @@ if command -v "${OPENCODE_BIN:-opencode}" >/dev/null 2>&1; then chk opencode OK;
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then chk gh OK; else chk gh WARN "gh o gh auth status no responden: hacen falta para abrir el PR"; fi
 if [ "$ERRORS" -gt 0 ]; then echo "ERROR: faltan requisitos (${ERRORS}); no sigo" >&2; echo "HANDOFF=blocked REASON=requirements"; exit 1; fi
 
-# ---- fabrica instalada y herramientas (las del destino si existen; si no, las de esta copia) ----
-if [ -f "${DIR}/factory/project.json" ] && [ -f "${DIR}/01-TOOLS/next-step.sh" ]; then FACTORY=installed; T="$DIR"; else FACTORY=missing; T="$SRC"; fi
-LINT="${T}/factory/scripts/project-lint.mjs"
-RSCPIN="${T}/factory/scripts/rsc-pin.sh"
-
-if [ "$FACTORY" = installed ]; then
-  mm="$(cd "$DIR" && node "${T}/factory/scripts/validate-models.mjs" --config 2>&1)" && chk models OK || chk models WARN "$(printf '%s' "$mm" | tail -3 | tr '\n' ' ')"
-  # runner de tests: scripts.test real, FACTORY_TEST_CMD o gate.test_cmd (el gate falla sin uno)
-  if [ -n "${FACTORY_TEST_CMD:-}" ] || (cd "$DIR" && node -e '
-      const fs=require("fs"); let ok=false;
-      try { const s=(JSON.parse(fs.readFileSync("package.json","utf8")).scripts||{}).test; ok=!!s && !/no test specified|define aqui/.test(s); } catch {}
-      try { if ((JSON.parse(fs.readFileSync("factory/config.json","utf8")).gate||{}).test_cmd) ok=true; } catch {}
-      process.exit(ok?0:1)') 2>/dev/null; then chk tests OK; else chk tests WARN "no hay runner de tests (scripts.test, FACTORY_TEST_CMD o gate.test_cmd): el gate fallara"; fi
-fi
-
-# ---- modo (derivado, no guardado) ----
-CONTENT="$(node -e '
+# ---- fabrica instalada, herramientas y modo (derivados, no guardados); se recalculan tras aplicar un paso ----
+derive() {
+  if [ -f "${DIR}/factory/project.json" ] && [ -f "${DIR}/01-TOOLS/next-step.sh" ]; then FACTORY=installed; T="$DIR"; else FACTORY=missing; T="$SRC"; fi
+  LINT="${T}/factory/scripts/project-lint.mjs"
+  RSCPIN="${T}/factory/scripts/rsc-pin.sh"
+  CONTENT="$(content_kind)"
+  PROJECT="none"
+  if [ -f "$LINT" ]; then
+    PROJECT="$(node "$LINT" state --root "$DIR" 2>/dev/null | sed -n 's/^PROJECT=//p' | head -1)"
+    [ -n "$PROJECT" ] || { echo "ERROR: project-lint state no respondio; no adivino el modo" >&2; echo "HANDOFF=blocked REASON=project-lint"; exit 1; }
+  fi
+  NEXT="$( [ -f "$LINT" ] && node "$LINT" state --root "$DIR" 2>/dev/null | sed -n 's/^NEXT=\([^ ]*\).*/\1/p' | head -1 || true)"; NEXT="${NEXT:--}"
+  if [ "$FACTORY" = installed ] && { [ "$PROJECT" = partial ] || [ "$PROJECT" = stale ]; }; then MODE=D; else MODE="$CONTENT"; fi
+}
+content_kind() {
+  node -e '
   const fs=require("fs"), path=require("path"); const root=process.argv[1];
   const ANYWHERE=new Set([".git","node_modules"]);   // en cualquier nivel
   const TOP=new Set([".worktrees","factory",".rsc",".opencode",".hooks",".agents","01-TOOLS","03-SKILLS"]);   // solo en la raiz: son de la fabrica o de RSC
@@ -77,14 +76,19 @@ CONTENT="$(node -e '
     if (SKIP_PATH.includes(r)) continue;
     if (e.name==="package.json") { if (realPkg(path.join(d,e.name))) code=true; continue; }
     if (MANIFEST.has(e.name) || EXT.has(e.name.split(".").pop())) code=true; else if (/\.md$/i.test(e.name)) md=true; } })(root,"");
-  console.log(code?"C":md?"B":"A")' "$DIR")"
-PROJECT="none"
-if [ -f "$LINT" ]; then
-  PROJECT="$(node "$LINT" state --root "$DIR" 2>/dev/null | sed -n 's/^PROJECT=//p' | head -1)"
-  [ -n "$PROJECT" ] || { echo "ERROR: project-lint state no respondio; no adivino el modo" >&2; echo "HANDOFF=blocked REASON=project-lint"; exit 1; }
+  console.log(code?"C":md?"B":"A")' "$DIR"
+}
+
+derive
+if [ "$FACTORY" = installed ]; then
+  mm="$(cd "$DIR" && node "${T}/factory/scripts/validate-models.mjs" --config 2>&1)" && chk models OK || chk models WARN "$(printf '%s' "$mm" | tail -3 | tr '\n' ' ')"
+  # runner de tests: scripts.test real, FACTORY_TEST_CMD o gate.test_cmd (el gate falla sin uno)
+  if [ -n "${FACTORY_TEST_CMD:-}" ] || (cd "$DIR" && node -e '
+      const fs=require("fs"); let ok=false;
+      try { const s=(JSON.parse(fs.readFileSync("package.json","utf8")).scripts||{}).test; ok=!!s && !/no test specified|define aqui/.test(s); } catch {}
+      try { if ((JSON.parse(fs.readFileSync("factory/config.json","utf8")).gate||{}).test_cmd) ok=true; } catch {}
+      process.exit(ok?0:1)') 2>/dev/null; then chk tests OK; else chk tests WARN "no hay runner de tests (scripts.test, FACTORY_TEST_CMD o gate.test_cmd): el gate fallara"; fi
 fi
-NEXT="$( [ -f "$LINT" ] && node "$LINT" state --root "$DIR" 2>/dev/null | sed -n 's/^NEXT=\([^ ]*\).*/\1/p' | head -1 || true)"; NEXT="${NEXT:--}"
-if [ "$FACTORY" = installed ] && { [ "$PROJECT" = partial ] || [ "$PROJECT" = stale ]; }; then MODE=D; else MODE="$CONTENT"; fi
 
 # ---- estado de cada paso ----
 open_job() { # id del job de documentacion abierto (init-*, con worktree y sin PR), el mas reciente
@@ -136,7 +140,8 @@ if [ -n "$APPLY" ]; then
   esac
 fi
 
-# ---- informe ----
+# ---- informe (con el estado recalculado: un paso aplicado puede haber instalado la fabrica o creado el job) ----
+derive
 echo "DIR=${DIR}"
 echo "CONTENT=${CONTENT}"
 echo "FACTORY=${FACTORY}"
