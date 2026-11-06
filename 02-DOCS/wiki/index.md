@@ -9,6 +9,8 @@
 | ADRs | `02-DOCS/wiki/sdd/decisions.md` | Decisiones de arquitectura (ADR-001 a ADR-011; el estado de un ADR nuevo lo fija el flujo: `Aprobado` si el humano confirmó el spec con `spec.ok`) |
 | metodología | `02-DOCS/wiki/sdd/methodology.md` | Método genérico: actores, fases, buenas prácticas y definición de hecho (vale para cualquier proyecto) |
 | requisitos de la fábrica | `02-DOCS/wiki/sdd/factory-requirements.md` | RF-F1 a RF-F10: lo que debe garantizar la propia fábrica (no se copia a otros proyectos) |
+| plan de `/factory-init` | `02-DOCS/wiki/sdd/factory-init-plan.md` | Ramas, orden y comprobaciones para construir `/factory-init` y la base documental del proyecto (borrador) |
+| especificación de `/factory-init` | `02-DOCS/wiki/sdd/factory-init-spec.md` | RF-I1 a RF-I17: formatos, reglas de `project-lint`, protocolo de peticiones al Brain, agentes, RSC fijado (borrador) |
 | plantilla de spec | `02-DOCS/wiki/sdd/spec-template.md` | Estructura del spec (perfil `full`): actores, RF-n, diseño, ADR, trazabilidad |
 | plantilla de job | `02-DOCS/wiki/sdd/job-page-template.md` | Estructura de la página que documenta cada job |
 | documentación por job | `02-DOCS/wiki/jobs/<id>.md` | Qué se construyó, diseño, pruebas (con el commit del gate) y lecciones de cada job; viaja en el PR del job |
