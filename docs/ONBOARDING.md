@@ -67,7 +67,7 @@ El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git
    # opcional: --engine opencode (por defecto; el único soportado hoy)
    ```
    Si un archivo del destino ya existe y difiere, el instalador lista los conflictos y se detiene (`--force` solo sobrescribe maquinaria; nunca el Brain, `project.json`, `package.json` ni `AGENTS.md`). No instala el harness RSC (eso es `npx @ericrisco/rsc`, aparte) ni toca `/etc/opencode`.
-3. **Escribe el contexto:** rellena `02-DOCS/wiki/context.md` (qué es el proyecto, actores, stack, cómo se prueba, restricciones) y los marcadores `RELLENAR` de `02-DOCS/wiki/sdd/constitution.md`. El spec-writer lee `context.md` antes de cada spec; `--check` avisa mientras queden marcadores. Si el destino ya tenía `AGENTS.md`, las reglas de la fábrica quedan en `AGENTS.factory.md`: fusiónalas a mano.
+3. **Escribe el contexto:** rellena `02-DOCS/wiki/context.md` (qué es el proyecto, actores, stack, cómo se prueba, restricciones) y los marcadores `RELLENAR` de `02-DOCS/wiki/sdd/constitution.md`. El spec-writer lee `context.md` antes de cada spec; `--check` (se lanza desde el repo de la fábrica con la ruta del proyecto, no desde el proyecto) avisa mientras queden marcadores. Si el destino ya tenía `AGENTS.md`, las reglas de la fábrica quedan en `AGENTS.factory.md`: fusiónalas a mano.
 4. **Primer commit a `main`** con la instalación y el CI (`.github/workflows/ci.yml`, que el instalador crea desde `factory/templates/project-ci.yml`; el job se llama `ci`). Si usarás code owners, añade `.github/CODEOWNERS`. Se hace **antes** de proteger `main`.
 5. **Protege `main`:**
    ```bash

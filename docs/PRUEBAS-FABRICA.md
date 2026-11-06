@@ -146,6 +146,6 @@ Anota cualquier bloqueo inesperado con el comando exacto.
 - El job termina con PR en borrador desde `factory/<job-id>`, y el PR incluye `02-DOCS/wiki/jobs/<job-id>.md`.
 - El spec-writer usó `context.md` (aparece en `trace.md` en la línea `Brain:`).
 - El check `ci` corre y **tú** haces el merge. No exijas `behavior-tests` fuera de `ai-factory`.
-- Después del job, `install-into.sh . --check` sigue en exit 0, y el destino no tiene `factory-requirements.md` ni `RF-F`.
+- Después del job, `bash <ruta-de-la-fábrica>/factory/scripts/install-into.sh /ruta/prueba --check` (se lanza desde la fábrica; la copia instalada en el proyecto no puede comprobarse a sí misma) sigue en exit 0, y el destino no tiene `factory-requirements.md` ni `RF-F`.
 
 **Qué anotar:** el comando exacto y la salida de cada bloqueo; en qué paso se detuvo; si el guard bloqueó algo (`factory/logs/blocked.log`). Si el guard o un permiso bloquea una acción, se detiene el trabajo y se informa; no se rodea.

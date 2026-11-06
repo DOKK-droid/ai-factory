@@ -100,7 +100,8 @@ TOP="$(git -C "$DEST" rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: 
 SRC_COMMON="$(git -C "$SRC" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 DEST_COMMON="$(git -C "$DEST" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 if [ "$DEST" = "$SRC" ] || { [ -n "$SRC_COMMON" ] && [ "$SRC_COMMON" = "$DEST_COMMON" ]; }; then
-  echo "ERROR: el destino es el propio repo de la fabrica (o una worktree suya). Elige otro proyecto." >&2; exit 1
+  echo "ERROR: el destino es el propio repo de la fabrica (o una worktree suya). Elige otro proyecto." >&2
+  echo "       Si lanzaste la copia instalada en un proyecto, usa la de la fabrica: bash <ruta-de-la-fabrica>/factory/scripts/install-into.sh <proyecto> --check" >&2; exit 1
 fi
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -168,7 +169,7 @@ gen_context() {
 # Contexto de ${NAME}
 
 > Rellena cada seccion antes del primer job (borra el marcador \`RELLENAR\` al completarla). El spec-writer lee esta pagina antes de escribir cada spec.
-> \`bash factory/scripts/install-into.sh . --check\` avisa mientras queden marcadores sin rellenar.
+> \`install-into.sh <este-proyecto> --check\`, lanzado desde el repo de la fabrica (la copia instalada aqui no puede comprobarse a si misma), avisa mientras queden marcadores sin rellenar.
 
 ## Que es y para quien
 <!-- RELLENAR: que hace el proyecto y quien lo usa, en 2-3 frases -->
@@ -427,7 +428,7 @@ fi
 
 echo
 echo "Instalado en ${DEST}. Siguientes pasos (los ejecutas tu):"
-echo "  1. cd ${DEST} && bash factory/scripts/install-into.sh . --check   # comprueba la instalacion"
+echo "  1. bash ${SRC}/factory/scripts/install-into.sh ${DEST} --check   # comprueba la instalacion (se lanza desde la fabrica, no desde el proyecto)"
 echo "  2. Rellena 02-DOCS/wiki/context.md y 02-DOCS/wiki/sdd/constitution.md (marcadores RELLENAR)"
 [ "$AGENTS_TARGET" != "AGENTS.factory.md" ] || echo "     y fusiona AGENTS.factory.md en tu AGENTS.md"
 echo "  3. npm run hooks:install                                           # activa los hooks de git"
