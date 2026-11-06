@@ -6,7 +6,9 @@ import path from 'node:path';
 import { REPO, tmp, write, git, run } from './helpers.mjs';
 
 const INSTALL = path.join(REPO, 'factory/scripts/install-into.sh');
-const sh = (args, opts = {}) => run('bash', [INSTALL, ...args], { cwd: opts.cwd || REPO, env: { ...process.env, ...(opts.env || {}) } });
+// la config managed de la maquina de quien ejecuta no debe cambiar el resultado: por defecto, una copia de la plantilla en un directorio temporal
+const MANAGED_OK = tmp('af-managed-'); fs.copyFileSync(path.join(REPO, 'factory/templates/managed-opencode.json'), path.join(MANAGED_OK, 'opencode.json'));
+const sh = (args, opts = {}) => run('bash', [INSTALL, ...args], { cwd: opts.cwd || REPO, env: { ...process.env, FACTORY_MANAGED_DIR: MANAGED_OK, ...(opts.env || {}) } });
 
 /** Repo destino con un commit en main. `files` = archivos extra del proyecto. */
 function dest(files = { 'README.md': '# proyecto\n' }) {
@@ -137,6 +139,14 @@ test('el comando de comprobacion que se imprime y se escribe se lanza desde la f
   const own = run('bash', [path.join(d, 'factory/scripts/install-into.sh'), '.', '--check'], { cwd: d });
   assert.equal(own.status, 1); assert.match(own.stderr, /propio repo de la fabrica/); assert.match(own.stderr, /usa la de la fabrica/);
   assert.equal(sh([d, '--check']).status, 0);
+});
+test('--check avisa (sin cambiar el codigo de salida) si la config managed de OpenCode falta o difiere de la plantilla', () => {
+  const d = installed(); write(path.join(d, '02-DOCS/wiki/context.md'), '# Contexto\nTodo relleno.\n'); write(path.join(d, '02-DOCS/wiki/sdd/constitution.md'), '# C\nok\n');
+  let r = sh([d, '--check']); assert.equal(r.status, 0); assert.doesNotMatch(r.stdout, /AVISO/);
+  r = sh([d, '--check'], { env: { FACTORY_MANAGED_DIR: tmp('af-nomanaged-') } });
+  assert.equal(r.status, 0, r.stdout); assert.match(r.stdout, /AVISO: config managed de OpenCode: NO INSTALADA/); assert.match(r.stdout, /Instalala tu: sudo bash .*install-managed\.sh --apply/);
+  const other = tmp('af-othermanaged-'); write(path.join(other, 'opencode.json'), '{"permission":{"bash":{}}}\n');
+  r = sh([d, '--check'], { env: { FACTORY_MANAGED_DIR: other } }); assert.equal(r.status, 0); assert.match(r.stdout, /AVISO: config managed de OpenCode: DIFIERE/);
 });
 test('--check: 0 tras instalar (con aviso de contexto sin rellenar); 1 si falta, difiere o se coló algo de la fabrica', () => {
   const d = installed();

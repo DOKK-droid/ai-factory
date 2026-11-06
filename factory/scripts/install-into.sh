@@ -343,6 +343,8 @@ if [ "$CHECK" -eq 1 ]; then
   if grep -q 'ai-factory — Constitution' "${DEST}/02-DOCS/wiki/sdd/constitution.md" 2>/dev/null; then bad "constitution.md es la de la fabrica"; fi
   # RSC fijado: si el destino lo tiene, debe estar en la version del pin con sync y auto-update apagados (offline; sin RSC no pasa nada)
   if ! RSC_OUT="$(bash "${HERE}/rsc-pin.sh" --dir "$DEST" --check 2>&1)"; then bad "RSC: $(printf '%s' "$RSC_OUT" | tr '\n' ' ')"; fi
+  # config managed de OpenCode (/etc/opencode): aviso y no error; solo lectura. Sin ella nada impide que un agente o RSC reescriba opencode.json
+  if ! MG="$(bash "${HERE}/install-managed.sh" --check 2>&1)"; then warn "config managed de OpenCode: $(printf '%s' "$MG" | head -1). Instalala tu: sudo bash ${HERE}/install-managed.sh --apply"; fi
   # contexto sin rellenar: aviso (no cambia el codigo de salida)
   if grep -q 'RELLENAR' "${DEST}/02-DOCS/wiki/context.md" 2>/dev/null; then warn "02-DOCS/wiki/context.md aun tiene marcadores RELLENAR: el primer spec nacera sin contexto"; fi
   if grep -q 'RELLENAR' "${DEST}/02-DOCS/wiki/sdd/constitution.md" 2>/dev/null; then warn "02-DOCS/wiki/sdd/constitution.md aun tiene marcadores RELLENAR"; fi
