@@ -10,7 +10,8 @@
 #           --force  instala aunque el arbol del destino tenga cambios y sobrescribe maquinaria que difiere
 #                    (nunca sobrescribe el Brain, project.json, package.json ni AGENTS.md del destino).
 # Requisitos del destino: existe, es la raiz de un repo git, arbol limpio (o --force); no es esta fabrica.
-# No toca /etc/opencode, no instala hooks de git, no crea reglas de GitHub y no instala el harness RSC (eso lo hace `npx @ericrisco/rsc`).
+# No toca /etc/opencode, no instala hooks de git y no crea reglas de GitHub. RSC es opcional y va fijado (factory/rsc-pin.json): si el destino
+# ya lo tiene, --apply llama a rsc-pin.sh --apply (apaga knowledge-sync y auto-update); si no, el dry-run y los siguientes pasos dicen como instalarlo.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -32,6 +33,7 @@ COPY_ENTRIES=(
   factory/scripts
   factory/templates
   factory/config.json
+  factory/rsc-pin.json
   factory/jobs/.gitkeep
   03-SKILLS
   factory-agent
@@ -121,6 +123,9 @@ gen_agents() { # AGENTS.md de la fabrica sin el bloque del harness RSC y sin la 
     /^Este repositorio es una AI Software Factory/ { print "Este repositorio (" n ") usa la AI Software Factory sobre OpenCode; los modelos estan en `factory/config.json`."; next }
     { print }' "${SRC}/AGENTS.md"
 }
+# AGENTS.md del destino sin el bloque que RSC anade entre marcadores (el bloque es de RSC, no de la fabrica); ver factory/scripts/rsc-pin.sh
+strip_rsc() { awk '/<!-- rsc-suggest:start -->/{skip=1; next} /<!-- rsc-suggest:end -->/{skip=0; next} !skip{print}' "$1" 2>/dev/null; }
+same_agents() { [ -f "$2" ] && [ "$(cat "$1")" = "$(strip_rsc "$2")" ]; }   # $(...) ignora las lineas en blanco finales que deja el bloque
 gen_ci() { cat "${SRC}/factory/templates/project-ci.yml"; }
 gen_project_json() {
   node -e '
@@ -306,7 +311,7 @@ if [ "$CHECK" -eq 1 ]; then
   done < <(copy_files)
   # AGENTS.md: el instalado o AGENTS.factory.md, comparado con la version adaptada
   gen_agents > "${TMP}/agents"
-  if cmp -s "${TMP}/agents" "${DEST}/AGENTS.md" 2>/dev/null || cmp -s "${TMP}/agents" "${DEST}/AGENTS.factory.md" 2>/dev/null; then :; else bad "AGENTS.md o AGENTS.factory.md (no coincide con la version adaptada)"; fi
+  if same_agents "${TMP}/agents" "${DEST}/AGENTS.md" || same_agents "${TMP}/agents" "${DEST}/AGENTS.factory.md"; then :; else bad "AGENTS.md o AGENTS.factory.md (no coincide con la version adaptada)"; fi
   [ -f "${DEST}/${CI_ENTRY}" ] || bad "${CI_ENTRY}"
   # package.json: los scripts factory:* y hooks:install
   if [ -f "${DEST}/package.json" ]; then
@@ -336,6 +341,8 @@ if [ "$CHECK" -eq 1 ]; then
   LEAK="$(grep -rIlE 'RF-F[0-9]' "${DEST}/02-DOCS" "${DEST}/AGENTS.md" "${DEST}/AGENTS.factory.md" 2>/dev/null | sed "s#^${DEST}/##" | tr '\n' ' ' || true)"
   [ -z "$LEAK" ] || bad "hay requisitos RF-F de la fabrica en: ${LEAK}"
   if grep -q 'ai-factory — Constitution' "${DEST}/02-DOCS/wiki/sdd/constitution.md" 2>/dev/null; then bad "constitution.md es la de la fabrica"; fi
+  # RSC fijado: si el destino lo tiene, debe estar en la version del pin con sync y auto-update apagados (offline; sin RSC no pasa nada)
+  if ! RSC_OUT="$(bash "${HERE}/rsc-pin.sh" --dir "$DEST" --check 2>&1)"; then bad "RSC: $(printf '%s' "$RSC_OUT" | tr '\n' ' ')"; fi
   # contexto sin rellenar: aviso (no cambia el codigo de salida)
   if grep -q 'RELLENAR' "${DEST}/02-DOCS/wiki/context.md" 2>/dev/null; then warn "02-DOCS/wiki/context.md aun tiene marcadores RELLENAR: el primer spec nacera sin contexto"; fi
   if grep -q 'RELLENAR' "${DEST}/02-DOCS/wiki/sdd/constitution.md" 2>/dev/null; then warn "02-DOCS/wiki/sdd/constitution.md aun tiene marcadores RELLENAR"; fi
@@ -371,7 +378,7 @@ done
 
 gen_agents > "${TMP}/agents"
 if [ ! -e "${DEST}/AGENTS.md" ]; then AGENTS_TARGET=AGENTS.md; AGENTS_NOTE="se crea"
-elif cmp -s "${TMP}/agents" "${DEST}/AGENTS.md"; then AGENTS_TARGET=""; AGENTS_NOTE="AGENTS.md ya es igual"
+elif same_agents "${TMP}/agents" "${DEST}/AGENTS.md"; then AGENTS_TARGET=""; AGENTS_NOTE="AGENTS.md ya es igual (salvo el bloque de RSC, si lo hay)"
 else AGENTS_TARGET=AGENTS.factory.md; AGENTS_NOTE="el destino ya tiene AGENTS.md: no se toca; las reglas de la fabrica van en AGENTS.factory.md (fusionalas a mano)"; fi
 
 LOCK_ADD="$(lock_missing | awk -F'\t' '$2=="missing"{print $1}' | tr '\n' ' ')"
@@ -399,6 +406,8 @@ echo "  skills de terceros (--engine ${ENGINE}): ${SKILLS_DIR}/"
 echo "== Se crea si falta (Brain limpio y config del proyecto; nunca se sobrescribe) =="
 for f in "${CREATE[@]}"; do echo "  CREAR   ${f}"; done
 for f in "${KEEP[@]}"; do echo "  CONSERVAR ${f} (ya existe)"; done
+echo "== RSC fijado (rsc-pin.sh, dry-run) =="
+bash "${HERE}/rsc-pin.sh" --dir "$DEST" 2>&1 | sed 's/^/  /' || true
 echo "== No se copia: tests/, ADR y constitucion de la fabrica, jobs, docs de parches, .rsc*, 01-TOOLS/_TEMPLATE, 02-DOCS/wiki/sdd/factory-requirements.md =="
 
 if [ "${#CONFLICT[@]}" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
@@ -435,4 +444,11 @@ echo "  3. npm run hooks:install                                           # act
 echo "  4. bash factory/scripts/install-managed.sh                         # dry-run de la config managed (luego --apply con sudo)"
 echo "  5. bash factory/scripts/onboard-project.sh OWNER/REPO --check-name ci   # dry-run del ruleset de main"
 echo "  6. Commitea la instalacion en main (antes de proteger main) y lanza un job trivial: /factory \"<tarea pequena>\""
-echo "El harness RSC no se instala aqui: si lo quieres, usa \`npx @ericrisco/rsc\` aparte."
+if [ -f "${DEST}/.rsc.json" ]; then
+  echo
+  echo "== RSC ya instalado en el destino: se fija (rsc-pin.sh --apply) =="
+  bash "${HERE}/rsc-pin.sh" --dir "$DEST" --apply || { echo "ERROR: la maquinaria quedo instalada, pero rsc-pin.sh fallo (ver arriba). Repite: bash ${HERE}/rsc-pin.sh --dir ${DEST} --apply" >&2; exit 1; }
+else
+  echo "RSC es opcional. Para instalarlo fijado a la version de la fabrica (lo ejecutas tu; primero muestra el plan sin escribir):"
+  echo "     bash ${HERE}/rsc-pin.sh --dir ${DEST} --apply --technical-level <non-technical|mixed|technical> --goal \"<para que es el proyecto>\""
+fi
