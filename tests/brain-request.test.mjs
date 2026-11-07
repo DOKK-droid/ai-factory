@@ -49,7 +49,7 @@ function seedProject(f, { approve = true } = {}) {
   for (const rel of ['README.md', ...DOC_NAMES.map((d) => `02-DOCS/wiki/project/${d}.md`), '02-DOCS/wiki/project/discovery.md', '02-DOCS/wiki/sdd/decisions.md']) {
     write(path.join(f.repo, rel), fs.readFileSync(path.join(p.root, rel), 'utf8'));
   }
-  if (approve) { const docs = Array.isArray(approve) ? approve : DOC_NAMES; const r = run('node', [LINT, 'approve', ...docs, '--root', f.repo]); assert.equal(r.status, 0, r.stdout); }
+  if (approve) { const docs = Array.isArray(approve) ? approve : DOC_NAMES; const r = run('node', [LINT, 'approve', ...docs, '--root', f.repo, '--bootstrap']); assert.equal(r.status, 0, r.stdout); }
   git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-qm', 'base documental'); git(f.repo, 'push', '-q', 'origin', 'main');
 }
 const edit = (file, from, to) => { const t = fs.readFileSync(file, 'utf8'); assert.ok(t.includes(from), `no contiene: ${from}`); fs.writeFileSync(file, t.replace(from, to)); };

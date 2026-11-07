@@ -16,10 +16,13 @@
  *   node project-lint.mjs state   [--dir D] [--root R]              CLAVE=valor (lo consume init-project.sh)
  *   node project-lint.mjs impact  <ID|documento|--changed> [...]     si cambias X, revisa Y
  *   node project-lint.mjs trace   [--write] [...]                    trazabilidad.md (derivado, nunca a mano)
- *   node project-lint.mjs approve <documento...> [...]               humano: registra el hash y marca aprobado
+ *   node project-lint.mjs approve <documento...> [--bootstrap] [...] humano: registra el hash y marca aprobado
  *   node project-lint.mjs gate    [...]                              0 solo si los 7 documentos estan aprobados y frescos
  *   node project-lint.mjs stamp   <job> [--root R] [--jobs-dir J]    liga el spec confirmado a la base: factory/jobs/<job>/implementa.lock
  *   node project-lint.mjs realign <job> [--root R] [--jobs-dir J]    solo lectura: NONE | STAMP | OK | DRIFT | INVALID (lo traduce next-step.sh)
+ * approve solo se acepta desde la worktree de un job (rama factory/*) o fuera de un repo git: en cualquier otra rama de un repo que
+ * tenga rama base (main/master, o base_branch de factory/config.json, o FACTORY_BASE) se niega, salvo `--bootstrap` explicito, que deja
+ * constancia en la salida. Asi un cambio de requisito pasa por un job de documentacion y su PR, no por una aprobacion suelta.
  * stamp/realign (RF-I18): el hash de cada bloque que el spec cita en `Implementa:` se guarda al confirmarse el spec (spec.ok); si luego
  * cambia o desaparece alguno, el job vuelve al spec-writer. R = raiz con la base (por defecto la worktree del job, si existe).
  * Salida: 0 sin errores, 1 con errores, 64 uso incorrecto.
@@ -340,6 +343,25 @@ export function changed(a) {
   return out;
 }
 
+/**
+ * Q2: donde se puede aprobar. Devuelve { blocked, why?, note? }. Sin repo git (tmp de pruebas) o sin rama base no se restringe;
+ * en una rama que no es factory/* de un repo con rama base, solo con `bootstrap`.
+ */
+export function approveBlock(root, { bootstrap = false, env = process.env } = {}) {
+  const g = (...a) => { try { return execFileSync('git', ['-C', root, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
+  if (g('rev-parse', '--git-dir') === null) return { blocked: false };
+  let bases = env.FACTORY_BASE ? [env.FACTORY_BASE] : null;
+  if (!bases) { try { const b = JSON.parse(fs.readFileSync(path.join(root, 'factory/config.json'), 'utf8')).base_branch; if (typeof b === 'string' && b) bases = [b]; } catch { /* sin config */ } }
+  bases = bases || ['main', 'master'];
+  const base = bases.find((b) => g('rev-parse', '--verify', '-q', `refs/heads/${b}`) !== null || g('rev-parse', '--verify', '-q', `refs/remotes/origin/${b}`) !== null);
+  if (!base) return { blocked: false };
+  const branch = g('symbolic-ref', '--short', '-q', 'HEAD');
+  if (branch && branch.startsWith('factory/')) return { blocked: false };
+  const where = branch ? `la rama ${branch}` : 'un HEAD desacoplado (detached)';
+  if (bootstrap) return { blocked: false, note: `BOOTSTRAP: aprobado con --bootstrap desde ${where} (fuera de la worktree de un job factory/*; rama base ${base})` };
+  return { blocked: true, why: `approve se niega desde ${where}: la base documental se aprueba en la worktree de un job de documentacion (rama factory/*), no en ${base} ni en una rama suelta.\nEjecutalo asi: cd factory/worktrees/<job> && node factory/scripts/project-lint.mjs approve <documentos>\nSi es el primer arranque del proyecto y no hay job, repite con --bootstrap (queda constancia en la salida).` };
+}
+
 /** Humano: registra el hash de cada documento y lo marca aprobado. Devuelve { ok, errors[] }. */
 export function approve(docNames, opts = {}) {
   const errors = [];
@@ -464,16 +486,17 @@ export function stamp(c) {
 const fmt = (p) => `${p.code} ${p.sev} ${p.doc}${p.doc.includes('.') ? '' : '.md'}${p.line ? ':' + p.line : ''} ${p.msg}`;
 
 function cli(argv) {
-  const args = [], opt = { strict: false, write: false, changed: false, dir: DEFAULT_DIR, root: process.cwd(), rootGiven: false, jobsDir: null };
+  const args = [], opt = { strict: false, write: false, changed: false, bootstrap: false, dir: DEFAULT_DIR, root: process.cwd(), rootGiven: false, jobsDir: null };
   for (let i = 0; i < argv.length; i++) {
     const x = argv[i];
-    if (x === '--strict') opt.strict = true; else if (x === '--write') opt.write = true; else if (x === '--changed') opt.changed = true;
+    if (x === '--strict') opt.strict = true; else if (x === '--write') opt.write = true; else if (x === '--changed') opt.changed = true; else if (x === '--bootstrap') opt.bootstrap = true;
     else if (x === '--dir' || x === '--root') { if (!argv[i + 1]) return usage(); opt[x.slice(2)] = argv[++i]; if (x === '--root') opt.rootGiven = true; }
     else if (x === '--jobs-dir') { if (!argv[i + 1]) return usage(); opt.jobsDir = argv[++i]; }
     else if (x.startsWith('--')) return usage(); else args.push(x);
   }
   const [cmd, ...rest] = args;
   const base = { dir: opt.dir, root: path.resolve(opt.root) };
+  if (opt.bootstrap && cmd !== 'approve') return usage();
   if (cmd === 'check') { const a = analyze({ ...base, strict: opt.strict }); a.problems.forEach((p) => console.log(fmt(p))); return a.problems.some((p) => p.sev === 'E') ? 1 : 0; }
   if (cmd === 'state') {
     const a = analyze(base);
@@ -500,8 +523,10 @@ function cli(argv) {
   }
   if (cmd === 'approve') {
     if (!rest.length) return usage();
+    const blk = approveBlock(base.root, { bootstrap: opt.bootstrap });
+    if (blk.blocked) { console.log(blk.why); return 1; }
     const r = approve(rest, base); r.errors.forEach((e) => console.log(e));
-    if (r.ok) console.log(`APROBADO ${rest.join(' ')}`);
+    if (r.ok) { console.log(`APROBADO ${rest.join(' ')}`); if (blk.note) console.log(blk.note); }
     return r.ok ? 0 : 1;
   }
   if (cmd === 'gate') { const o = gate(base); o.forEach((l) => console.log(l)); return o.length ? 1 : 0; }
@@ -513,6 +538,6 @@ function cli(argv) {
   }
   return usage();
 }
-function usage() { console.error('uso: project-lint.mjs check|state|impact|trace|approve|gate [--dir D] [--root R] [--strict] [--write] [--changed] | stamp|realign <job> [--root R] [--jobs-dir J]'); return 64; }
+function usage() { console.error('uso: project-lint.mjs check|state|impact|trace|approve|gate [--dir D] [--root R] [--strict] [--write] [--changed] [--bootstrap (solo approve)] | stamp|realign <job> [--root R] [--jobs-dir J]'); return 64; }
 
 if (import.meta.url === `file://${process.argv[1]}`) process.exit(cli(process.argv.slice(2)));
