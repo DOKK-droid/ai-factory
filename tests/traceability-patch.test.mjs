@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO, tmp, run } from './helpers.mjs';
+import { REPO, tmp, run, git } from './helpers.mjs';
 import { fx, fakeGh, drive, put, parse as parseNs, NEXT } from './ns-fixture.mjs';
 import { job, POLICY, IMPL, seedProject } from './trace-fixture.mjs';
 import { classifyBash, isProtectedPath } from '../factory/scripts/command-guard.mjs';
@@ -82,8 +82,37 @@ test('next-step 3b: sin spec.ok exigido no hay confirmación a la que ligar; sin
   const c = fx({ project: { spec_profile: 'full' } }).upTo('confirmed'); const r = c.ns(); delegate(r, 'builder'); assert.equal(r.state, '4');
 });
 
-// ---------------------------------------------------------------- brain_problem: la página del job
 const upToHuman = (o = {}) => { const f = job(o); stamped(f); f.commit(); f.gate(); f.reviews(1); f.decision(); f.human(); return f; };
+
+// ---------------------------------------------------------------- un spec realineado invalida gate, reviews y decisión
+/** Como un job real: la base cambia en la worktree, se commitea (commit-brain --project), el spec-writer realinea y el humano reconfirma. */
+const realign = (f) => {
+  f.changeReq('crear un [[Pedido]]', 'crear y cancelar un [[Pedido]]'); git(f.wt, 'add', '02-DOCS/wiki/project'); git(f.wt, 'commit', '-qm', 'docs: cambia REQ-F-1');
+  delegate(f.ns(), 'spec-writer'); f.spec({ implementa: IMPL }); stop(f.ns(), 'HUMAN_CONFIRM_SPEC'); f.confirm(); stamped(f);
+};
+test('un spec realineado invalida gate, reviews y decisión: se repite gate -> 4 reviewers -> approver, que decide', { skip: miss(nsRealign) }, () => {
+  const f = upToHuman(); delegate(f.ns(), 'memory-curator');   // sin realineación, lo anterior sigue vigente (el primer stamp no invalida nada)
+  realign(f);
+  let r = f.ns(); assert.equal(r.kind, 'RUN'); assert.match(r.value, /checks\.sh job-1$/); assert.equal(r.state, '5'); assert.match(r.why.join(), /anterior a implementa\.lock/);
+  f.gate();
+  r = f.ns(); assert.equal(r.kind, 'RUN'); assert.match(r.value, /launch-reviewers\.sh job-1 2$/); assert.equal(r.state, '7'); assert.match(r.why.join(), /ronda 1 son anteriores a implementa\.lock/);
+  f.reviews(2);
+  r = f.ns(); delegate(r, 'approver'); assert.equal(r.state, '8');   // la decision de la ronda 1 ya no vale
+  f.decision('CHANGES'); r = f.ns(); delegate(r, 'builder'); assert.equal(r.state, '9');                       // el approver decide: no cumple => de nuevo al builder
+  f.decision('ESCALATE'); stop(f.ns(), 'ESCALATED');                                                              // o lo escala al humano
+  f.decision('APPROVE'); r = f.ns(); assert.equal(r.kind, 'RUN'); assert.match(r.value, /risk\.sh job-1$/);        // o sigue a push/PR
+});
+test('un spec realineado respeta max_rounds: sin rondas libres decide el humano', { skip: miss(nsRealign) }, () => {
+  const f = upToHuman({ project: { ...POLICY, max_rounds: 1 } }); realign(f); f.gate();
+  const r = f.ns(); stop(r, 'MAX_ROUNDS'); assert.match(r.why.join(), /ronda 2 y max_rounds=1/);
+});
+test('un spec realineado que no toca el código tampoco vuelve a pasar por alto el gate: la fecha del lock manda, no el commit', { skip: miss(nsRealign) }, () => {
+  const f = upToHuman(); const head = f.head(); realign(f);
+  const fresh = run('bash', ['-c', `source "${path.join(REPO, '01-TOOLS/lib.sh')}"; factory_commit_fresh "${head}" HEAD "${f.wt}"`]).status;
+  assert.equal(fresh, 0, 'por commit el gate seguiría vigente (solo cambió documentación)'); assert.match(f.ns().value, /checks\.sh/);
+});
+
+// ---------------------------------------------------------------- brain_problem: la página del job
 test('next-step 11: la página del job debe llevar Implementa con la unión exacta de los IDs del spec', { skip: miss(nsPage) }, () => {
   const f = upToHuman(); f.curate({ implementaLine: false }); let r = f.ns(); delegate(r, 'memory-curator'); assert.match(r.why.join(), /02-DOCS\/wiki\/jobs\/job-1\.md: la página del job está sin la línea 'Implementa: REQ-F-1, REQ-F-2, UC-2'/);
   const page = path.join(f.wt, '02-DOCS/wiki/jobs/job-1.md'); fs.writeFileSync(page, fs.readFileSync(page, 'utf8').replace('# job job-1\n\n', '# job job-1\n\nImplementa: REQ-F-1\n\n'));
