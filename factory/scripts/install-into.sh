@@ -27,6 +27,7 @@ COPY_ENTRIES=(
   opencode.json
   .opencode/agent
   .opencode/command/factory.md
+  .opencode/command/factory-init.md
   .opencode/plugins/factory-guard.js
   .hooks
   01-TOOLS
@@ -131,9 +132,15 @@ gen_project_json() {
   node -e '
     const p = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     const sw = p.brain.agents["spec-writer"];
+    // La documentacion manda: un proyecto con la fabrica exige la base documental aprobada antes del primer spec (project_docs=required)
+    // y los agentes que deciden la leen antes de actuar (next-step.sh ignora las paginas que aun no existen).
+    const D = (...n) => n.map((x) => "02-DOCS/wiki/project/" + x + ".md");
+    const reads = { "spec-writer": D("00-vision", "01-requisitos", "02-casos-de-uso", "03-dominio", "04-arquitectura"), builder: D("01-requisitos", "02-casos-de-uso", "03-dominio", "04-arquitectura"), approver: D("01-requisitos", "02-casos-de-uso") };
+    const agents = { ...p.brain.agents, "spec-writer": [...new Set([...sw, "02-DOCS/wiki/context.md"])] };
+    for (const [a, pages] of Object.entries(reads)) agents[a] = [...new Set([...(agents[a] || []), ...pages])];
     const out = {
-      require_spec_ok: true, max_rounds: 3, spec_profile: "full", human_review_surfaces: [],
-      brain: { default: p.brain.default, agents: { ...p.brain.agents, "spec-writer": [...new Set([...sw, "02-DOCS/wiki/context.md"])] } },
+      require_spec_ok: true, max_rounds: 3, spec_profile: "full", human_review_surfaces: [], project_docs: "required",
+      brain: { default: p.brain.default, agents },
     };
     process.stdout.write(JSON.stringify(out, null, 2) + "\n");' "${SRC}/factory/project.json"
 }

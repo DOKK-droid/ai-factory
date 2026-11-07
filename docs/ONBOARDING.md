@@ -81,11 +81,13 @@ El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git
 9. **Local:** `npm run hooks:install`, `npm test`, `./factory-agent`.
 10. **Prueba de humo:** un job trivial con `/factory "<tarea pequeña>"`; comprueba que el PR sale en borrador desde `factory/<job-id>`, que el check `ci` corre y que **tú** haces el merge. No exijas `behavior-tests` fuera de `ai-factory`.
 
+11. **Base documental (opcional, recomendada para proyectos nuevos):** `/factory-init` en OpenCode. Ejecuta `factory/scripts/init-project.sh` (dry-run), te pide aprobar cada paso (`--apply install|deps|hooks|rsc|workspace`) y abre al agente `discovery`, que explora el repo, te hace las preguntas por rondas y coordina a `system-analyst`, `domain-modeler`, `architect`, `deployment-planner` y `consistency-auditor` en una worktree `factory/init-<aammdd>-<4 hex>`. Al final tú commiteas (`commit-brain.sh <job> --project`) y apruebas (`project-lint approve`); con `"project_docs": "required"` en `factory/project.json` ningún spec avanza sin esa aprobación. Los seis agentes necesitan sus líneas en `roles` de `factory/config.json` (se entregan como parche, ver `docs/propuestas/`).
+
 ### Qué instala (la tabla que el test de consistencia compara con el instalador)
 
 | Tipo | Ruta |
 |---|---|
-| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/rsc-pin.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `.agents/skills` (skills de terceros, según `--engine`), `factory-agent`, `factory-maint` |
+| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/command/factory-init.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/rsc-pin.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `.agents/skills` (skills de terceros, según `--engine`), `factory-agent`, `factory-maint` |
 | mezcla o adapta | `package.json` (solo añade los scripts `factory:*` y `hooks:install`), `.gitignore` (bloque de la fábrica), `AGENTS.md` (sin el bloque del harness RSC; si ya existe, queda `AGENTS.factory.md`), `skills-lock.json` (añade las skills de terceros que falten; nunca pisa una entrada del destino) |
 | crea si falta | `.github/workflows/ci.yml`, `factory/project.json`, `factory/backlog.md`, `02-DOCS/wiki/index.md`, `02-DOCS/wiki/context.md`, `02-DOCS/wiki/sdd/constitution.md`, `02-DOCS/wiki/sdd/decisions.md`, `02-DOCS/wiki/sdd/methodology.md`, `02-DOCS/wiki/sdd/spec-template.md`, `02-DOCS/wiki/sdd/job-page-template.md` |
 
