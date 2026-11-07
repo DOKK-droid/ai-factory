@@ -6,7 +6,7 @@
 #       bash factory/scripts/init-project.sh [--dir <proyecto>] --apply <paso> [-- <extra>]  # aplica UN paso
 # Pasos:  install (la fabrica no esta en el destino: install-into.sh --apply) · deps · hooks · rsc · workspace
 #   rsc:       rsc-pin.sh --apply; lo que va tras `--` se le pasa (--technical-level, --goal, --accept-plan <id>); RSC es opcional.
-#   workspace: crea (o reutiliza) el job init-<aammdd>-<4 hex> con new-job.sh: rama factory/<id> y su worktree.
+#   workspace: crea (o reutiliza) el job de documentacion init-<aammdd>-<4 hex> con new-job.sh --kind docs: rama factory/<id> y su worktree.
 # Modo: A proyecto vacio · B con .md y sin codigo · C con codigo · D base documental empezada (fabrica instalada y PROJECT partial|stale).
 # Nunca ejecuta sudo, install-managed.sh --apply ni onboard-project.sh --apply, ni toca /etc/opencode: los imprime como MANUAL:.
 # El script no pregunta nada: la aprobacion de cada --apply la da el humano en OpenCode (el agente discovery tiene `ask` sobre --apply).
@@ -135,7 +135,7 @@ if [ -n "$APPLY" ]; then
         deps) (cd "$DIR" && npm ci) ;;
         hooks) if pkg_has_script hooks:install; then (cd "$DIR" && npm run hooks:install); else (cd "$DIR" && bash .hooks/install-git-hooks.sh); fi ;;
         rsc) rc=0; bash "$RSCPIN" --dir "$DIR" --apply "${EXTRA[@]}" || rc=$?; if [ "$rc" -ne 0 ]; then echo "STEP:rsc exit=${rc} (3 = falta aceptar el plan; ver arriba)"; exit "$rc"; fi ;;
-        workspace) ID="init-$(date +%y%m%d)-$(od -An -N2 -tx1 /dev/urandom | tr -d ' \n')"; (cd "$DIR" && bash 01-TOOLS/new-job.sh "$ID") ;;
+        workspace) ID="init-$(date +%y%m%d)-$(od -An -N2 -tx1 /dev/urandom | tr -d ' \n')"; (cd "$DIR" && bash 01-TOOLS/new-job.sh "$ID" --kind docs) ;;
       esac ;;
   esac
 fi

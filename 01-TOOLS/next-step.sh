@@ -33,6 +33,13 @@
 #   Un lock mas nuevo que gate.md o que round-N/.commit invalida el gate y los reviews (estados 5 y 7): el spec cambio despues; se repite
 #   gate -> 4 reviewers -> approver, que decide (CHANGES al builder, ESCALATE al humano o APPROVE). max_rounds acota las pasadas.
 #
+# Job de documentacion (job.json `kind: docs`, RF-I9): cambia la base documental (02-DOCS/wiki/project/) sin builder. Mismo pipeline, con estas
+#   diferencias (toda la logica esta en factory/scripts/docs-job.mjs; aqui solo se traduce la primera palabra de su respuesta):
+#   2 el spec lo escribe system-analyst con el perfil `docs`; 4 los agentes dueños de cada documento sustituyen al builder (y COMMIT/TRACE son RUN);
+#   5 el gate de checks.sh es el de documentacion; 6 y 9 devuelven el trabajo al dueño del documento (o STOP DOCS_NEED_HUMAN si es del humano);
+#   10b STOP HUMAN_CONFIRM_PROJECT con `project-lint approve` (el humano aprueba la base) antes del curator; el 1c inicial no aplica.
+#   Un job.json sin kind es de codigo; cualquier otro valor es JOB_INCONSISTENT. En jobs de cualquier tipo, BASE_DOCS_BEHIND avisa de que la base
+#   documental de la rama base cambio y la worktree no la tiene (el humano rebasa).
 # Obsolescencia atada al commit: gate.md lleva `COMMIT: <sha>` y round-N/.commit el sha revisado; si HEAD de la
 # worktree es otro, el artefacto es OBSOLETO (salvo que lo posterior solo toque paginas del curator: factory_commit_fresh). decision.md y human.md se consideran vigentes solo si son MAS
 # NUEVOS (mtime) que lo que las origina. Cualquier valor ambiguo o ilegible => STOP, nunca se avanza.
@@ -42,6 +49,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPEC_LINT="${HERE}/../factory/scripts/spec-lint.mjs"
 BRAIN_REQ="${HERE}/../factory/scripts/brain-request.mjs"
 PROJECT_LINT="${HERE}/../factory/scripts/project-lint.mjs"
+DOCS_JOB="${HERE}/../factory/scripts/docs-job.mjs"
 
 if [ "${1:-}" = "--new-id" ]; then
   # Con frase: slug determinista (sin LLM) de sus primeras palabras clave + fecha + 4 hex para que no choque.
@@ -169,6 +177,40 @@ JOB_BASE="$(node -p "try{const j=JSON.parse(require('fs').readFileSync(process.a
 HEAD_SHA="$(wt_git rev-parse HEAD 2>/dev/null)" || stop JOB_INCONSISTENT "no pude leer HEAD de la worktree ${WT}"
 git --no-optional-locks -C "$ROOT" rev-parse -q --verify "${JOB_BASE}^{commit}" >/dev/null 2>&1 || stop BASE_UNKNOWN "no existe la rama base ${JOB_BASE} (job.json)"
 BASE_NAME="${JOB_BASE#origin/}"
+JOB_KIND="$(node -p "try{const k=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).kind;String(k===undefined?'code':(k==='code'||k==='docs'?k:'INVALID'))}catch(e){'INVALID'}" "${JOB_DIR}/job.json" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | head -1)"
+case "$JOB_KIND" in code|docs) ;; *) stop JOB_INCONSISTENT "job.json tiene un kind que no entiendo (solo code o docs; sin kind es code): ${JOB_DIR}/job.json" ;; esac
+export FACTORY_JOB_KIND="$JOB_KIND"
+[ "$JOB_KIND" != docs ] || SPEC_PROFILE=docs
+# La base documental de la rama base cambio despues de crear la worktree y esta no la tiene: el humano rebasa (jobs de cualquier tipo).
+# Solo lectura: se compara contra el ref local (haz `git fetch` para ver lo ultimo). Si no se puede calcular, STOP.
+if MBB="$(wt_git merge-base "$JOB_BASE" HEAD 2>/dev/null)" && [ -n "$MBB" ]; then
+  wt_git diff --quiet "$MBB" "$JOB_BASE" -- 02-DOCS/wiki/project 2>/dev/null; DRC=$?
+  case "$DRC" in
+    0) ;;
+    1) stop BASE_DOCS_BEHIND "${JOB_BASE} cambio la base documental (02-DOCS/wiki/project/) despues de crear esta worktree y la rama del job no lo tiene:
+$(wt_git diff --name-only "$MBB" "$JOB_BASE" -- 02-DOCS/wiki/project 2>/dev/null | head -8)
+Rebasa la rama del job (lo ejecuta el humano; si hay conflictos, los resuelve el humano)." "git -C factory/worktrees/${JOB_ID} rebase ${JOB_BASE}" ;;
+    *) stop BASE_DOCS_BEHIND "no pude comparar la base documental de ${JOB_BASE} con la de la worktree; no avanzo." ;;
+  esac
+else stop BASE_DOCS_BEHIND "no pude calcular el merge-base de ${JOB_BASE} con la rama del job; no avanzo (fallar cerrado)."; fi
+
+# ---------- job de documentacion: traduccion de docs-job.mjs ----------
+docs_call() { # docs_call <fase>: respuesta en DJS, primera palabra en DJ_FIRST
+  DJS="$(node "$DOCS_JOB" state --phase "$1" --job-dir "$JOB_DIR" --job-id "$JOB_ID" --worktree "$WT" --base "$JOB_BASE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')"
+  DJ_FIRST="$(printf '%s\n' "$DJS" | head -1)"
+}
+dj() { printf '%s\n' "$DJS" | sed -n "s/^$1: //p"; }   # valor(es) de la linea "CLAVE: valor"
+docs_act() { # traduce las palabras que son iguales en todas las fases; cualquier otra (vacia, de otra fase, texto raro) es un STOP: fail-closed
+  case "$DJ_FIRST" in
+    COMMIT|TRACE) [ -n "$(dj CMD)" ] || stop DOCS_JOB_INVALID "docs-job.mjs pidio '${DJ_FIRST}' sin comando"
+      run_ "$(dj CMD)" "$(dj WHY)" ;;
+    WORK|ALIGN) [ -n "$(dj OWNER)" ] && [ -n "$(dj FILES)" ] && [ -n "$(dj WHAT)" ] || stop DOCS_JOB_INVALID "docs-job.mjs no indico agente, archivos o tarea para '${DJ_FIRST}'"
+      delegate "$(dj OWNER)" "$(dj WHAT)" "$(dj FILES)" "$(dj WHY | paste -sd';' - | sed 's/;/; /g')" ;;
+    HUMAN) stop DOCS_NEED_HUMAN "$(dj WHY)" ;;
+    INVALID) stop DOCS_JOB_INVALID "$(dj WHY)" ;;
+    *) stop DOCS_JOB_INVALID "docs-job.mjs devolvio una respuesta inesperada ('$(printf '%s' "$DJ_FIRST" | cut -c1-60)'); no avanzo" ;;
+  esac
+}
 
 # ---------- 1. input ----------
 STATE=1
@@ -195,13 +237,13 @@ case "$BR_FIRST" in
 esac
 
 # ---------- 1c. politica project_docs: la base documental aprobada antes del primer spec ----------
-if [ "$PROJECT_DOCS" = "required" ]; then
+if [ "$PROJECT_DOCS" = "required" ] && [ "$JOB_KIND" != docs ]; then   # un job docs cambia la base: se aprueba al final (10b)
   STATE=project
   if ! PG="$(node "$PROJECT_LINT" gate --root "$WT" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"; then
     PG_LISTO="$(printf '%s\n' "$PG" | sed -n 's/^GATE \([0-9][0-9]-[a-z-]*\): LISTO$/\1/p' | paste -sd' ' -)"
     stop HUMAN_CONFIRM_PROJECT "project_docs=required: la base documental del proyecto no esta aprobada y fresca.
 $(printf '%s\n' "$PG" | head -12)
-Completala con /factory-init; el humano aprueba cada documento listo con el CMD (si lo hay)." ${PG_LISTO:+"node factory/scripts/project-lint.mjs approve ${PG_LISTO}"}
+Completala con /factory-init; el humano aprueba cada documento listo con el CMD (si lo hay)." ${PG_LISTO:+"cd factory/worktrees/${JOB_ID} && node factory/scripts/project-lint.mjs approve ${PG_LISTO}"}
   fi
 fi
 
@@ -214,6 +256,9 @@ spec_problem() { # un problema por linea (vacio = valido). Lo calcula spec-lint.
 }
 P="$(spec_problem)"
 if [ -n "$P" ]; then
+  if [ "$JOB_KIND" = docs ]; then
+    delegate system-analyst "spec de un job de documentacion (perfil docs: Surface none, ADR, Objetivo, Cambio solicitado, Documentos afectados como tabla ID/Documento/Agente dueño, Impacto en jobs, Criterios de aceptación numerados y Alcance dentro de 02-DOCS/wiki/project/; plantilla 02-DOCS/wiki/sdd/spec-docs-template.md) y tasks.md con una tarea por documento afectado" "factory/jobs/${JOB_ID}/spec.md,factory/jobs/${JOB_ID}/tasks.md" "$(printf '%s\n' "$P" | paste -sd';' - | sed 's/;/; /g')"
+  fi
   WHAT="SDD spec con Surface, criterios numerados y Alcance, y el desglose de tareas"
   [ "$SPEC_PROFILE" != "full" ] || WHAT="SDD spec completo (perfil full: Actores, Requisitos funcionales RF-n, Diseño, ADR, criterios que citan [RF-n], Alcance) y tasks.md con el RF que cubre cada tarea; plantilla en 02-DOCS/wiki/sdd/spec-template.md"
   delegate spec-writer "$WHAT" "factory/jobs/${JOB_ID}/spec.md,factory/jobs/${JOB_ID}/tasks.md" "$(printf '%s\n' "$P" | paste -sd';' - | sed 's/;/; /g')"
@@ -255,9 +300,15 @@ fi
 
 # ---------- 4. el builder ha commiteado algo? ----------
 STATE=4
+if [ "$JOB_KIND" = docs ]; then
+  # Job de documentacion: los agentes dueños de cada documento (no el builder) hacen el trabajo; docs-job.mjs decide quien y cuando esta listo.
+  docs_call work
+  [ "$DJ_FIRST" = READY ] || docs_act
+else
 # Los commits que solo tocan la base documental (peticiones aplicadas, 1b) no son trabajo del builder.
 NCOMMITS="$(git --no-optional-locks -C "$ROOT" rev-list --count "${JOB_BASE}..${HEAD_SHA}" -- . ':(exclude)02-DOCS/wiki/project' ':(exclude)02-DOCS/wiki/sdd/decisions.md' 2>/dev/null)" || stop BASE_UNKNOWN "no pude contar los commits del job sobre ${JOB_BASE}"
 [ "$NCOMMITS" -gt 0 ] || delegate builder "implementar el spec con TDD y commitear (solo en la worktree)" "factory/worktrees/${JOB_ID}/" "la worktree no tiene commits sobre ${JOB_BASE}"
+fi
 
 # ---------- 5. gate vigente ----------
 STATE=5
@@ -298,6 +349,7 @@ if [ "$GATE_L1" = "GATE: FAIL" ]; then
   if [ "$CUR" -ge "$MAX_ROUNDS" ] || [ "${STREAK:-1}" -ge "$MAX_ROUNDS" ]; then
     stop MAX_ROUNDS "el gate sigue en rojo y se agotaron las rondas (max_rounds=${MAX_ROUNDS}, rondas=${CUR}, gates seguidos en rojo=${STREAK:-?}). Decide tu."
   fi
+  if [ "$JOB_KIND" = docs ]; then docs_call fix; docs_act; fi
   delegate builder "corregir lo que reporta gate.md y commitear (solo en la worktree)" "factory/worktrees/${JOB_ID}/" "GATE: FAIL; lee factory/jobs/${JOB_ID}/gate.md"
 fi
 
@@ -336,6 +388,7 @@ case "$DECISION" in
   APPROVE) ;;
   CHANGES)
     [ "$CUR" -lt "$MAX_ROUNDS" ] || stop MAX_ROUNDS "el approver pide CHANGES en la ronda ${CUR} y max_rounds=${MAX_ROUNDS}. Decide tu."
+    if [ "$JOB_KIND" = docs ]; then docs_call changes; docs_act; fi
     delegate builder "aplicar los cambios que pide el approver y commitear (solo en la worktree)" "factory/worktrees/${JOB_ID}/" "decision.md = CHANGES; lee factory/jobs/${JOB_ID}/decision.md y round-${CUR}/review-*.md" ;;
   ESCALATE) stop ESCALATED "el approver escalo el job a un humano (decision.md = ESCALATE). Lee factory/jobs/${JOB_ID}/decision.md." ;;
   *) stop DECISION_INVALID "decision.md linea 1 no es APPROVE | CHANGES | ESCALATE (tiene: '${DECISION}')" ;;
@@ -356,6 +409,19 @@ case "$HUM_L1" in
 esac
 if [ "$HUM_L1" = "NEEDS_HUMAN" ] && ! grep -q '^## Resumen para el humano' "$HUM"; then
   delegate human-gate "añadir al final de human.md la seccion '## Resumen para el humano' (riesgos, evidencias, checklist); NO cambiar la linea 1" "factory/jobs/${JOB_ID}/human.md" "NEEDS_HUMAN sin resumen para el humano"
+fi
+
+# ---------- 10b. (job docs) el humano aprueba la base documental que este job cambio, antes de documentar y subir ----------
+# Es el bloque 1c reutilizado al final: el gate/reviews/approver ya vieron el cambio; project-lint approve (humano) lo deja aprobado y el
+# commit de aprobacion (project.ok y `estado:`) no invalida nada (lib.sh). Lo aprobado en la worktree lo commitea el estado 4 en la llamada siguiente.
+if [ "$JOB_KIND" = docs ]; then
+  STATE=project
+  docs_call approve
+  case "$DJ_FIRST" in
+    OK) ;;
+    CONFIRM) DJ_CMD="$(dj CMD)"; stop HUMAN_CONFIRM_PROJECT "$(dj WHY)" ${DJ_CMD:+"$DJ_CMD"} ;;
+    *) stop DOCS_JOB_INVALID "docs-job.mjs devolvio una respuesta inesperada para la aprobacion ('$(printf '%s' "$DJ_FIRST" | cut -c1-60)'); no avanzo" ;;
+  esac
 fi
 
 # ---------- 11. documentacion: trace + Brain del job (antes del push) ----------
@@ -382,6 +448,10 @@ brain_problem() { # imprime por que el Brain/trace no sirve (vacio = valido)
       listed="${listed}${p} "
     done
   fi
+  if [ "$JOB_KIND" = docs ]; then
+    case "$listed" in *" ${JOB_PAGE} "*) ;; *) echo "job de documentacion: la linea Brain: debe incluir ${JOB_PAGE}"; return ;; esac
+    grep -q "${GATE_COMMIT:0:7}" "${WT}/${JOB_PAGE}" || { echo "${JOB_PAGE} no cita el commit del gate (${GATE_COMMIT:0:7}): la evidencia es la de gate.md, no de memoria"; return; }
+  fi
   [ "$SPEC_PROFILE" = "full" ] || [ "$ADR_TITLE" != "none" ] || return 0
   if [ "$SPEC_PROFILE" = "full" ]; then
     case "$listed" in *" ${JOB_PAGE} "*) ;; *) echo "perfil full: la linea Brain: debe incluir ${JOB_PAGE}"; return ;; esac
@@ -406,6 +476,7 @@ BP="$(brain_problem)"
 if [ -n "$BP" ]; then
   WHAT="actualizar el Brain EN LA WORKTREE (solo ${JOB_PAGE}, index.md y decisions.md) y completar trace.md con una linea 'Brain: <paginas separadas por coma, o sin cambios>'"
   [ "$SPEC_PROFILE" != "full" ] || WHAT="escribir ${JOB_PAGE} en la worktree (## Resumen, Actores, Requisitos funcionales, Diseño, Implementación, Pruebas citando el COMMIT de gate.md, Lecciones), enlazarla en index.md y completar trace.md con 'Brain: <paginas>'"
+  [ "$JOB_KIND" != docs ] || WHAT="escribir ${JOB_PAGE} en la worktree (## Resumen del cambio documental, Documentos afectados con sus IDs, Pruebas citando el COMMIT de gate.md, Lecciones), enlazarla en index.md y completar trace.md con 'Brain: ${JOB_PAGE}, 02-DOCS/wiki/index.md'. NO edites 02-DOCS/wiki/project/: la base ya la cambiaron y la aprobaron los dueños y el humano"
   [ "$ADR_TITLE" = "none" ] || WHAT="${WHAT}; registrar en decisions.md '## ADR-${NEXT_ADR}: ${ADR_TITLE}' con 'Estado: ${ADR_STATUS}' (${ADR_WHY})"
   FILES="factory/jobs/${JOB_ID}/trace.md,factory/worktrees/${JOB_ID}/${JOB_PAGE},factory/worktrees/${JOB_ID}/02-DOCS/wiki/index.md"
   [ "$ADR_TITLE" = "none" ] || FILES="${FILES},factory/worktrees/${JOB_ID}/02-DOCS/wiki/sdd/decisions.md"
@@ -435,6 +506,10 @@ REMOTE_SHA="$(git --no-optional-locks -C "$ROOT" rev-parse -q --verify "refs/rem
 STATE=13
 if [ -s "${JOB_DIR}/pr.url" ]; then done_ "PR registrado por el humano: $(head -1 "${JOB_DIR}/pr.url")"; fi
 TITLE="$(sed -n 's/^#[[:space:]]*//p' "$SPEC" | head -1 | tr -cd 'A-Za-z0-9 ._:-' | cut -c1-70 | trim)"; [ -n "$TITLE" ] || TITLE="${JOB_ID}"
+if [ "$JOB_KIND" = docs ]; then
+  DT="$(sed -n 's/^#[[:space:]]*Spec[[:space:]]*\(—\|–\|-\)[[:space:]]*Cambio documental:[[:space:]]*/docs: /p' "$SPEC" | head -1 | tr -cd 'A-Za-z0-9 ._:-' | cut -c1-70 | trim)"
+  [ -z "$DT" ] || TITLE="$DT"
+fi
 BODY="Job ${JOB_ID}. Evidencia en factory/jobs/${JOB_ID}/ (decision.md, human.md, trace.md). PR en borrador: lo revisa y fusiona un humano."
 PRCMD="gh pr create --draft --base ${BASE_NAME} --head ${BRANCH} --title '${TITLE}' --body '${BODY}'"
 GH="${GH_BIN:-gh}"

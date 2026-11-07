@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # new-job.sh — crea la worktree AISLADA de un job. El builder trabaja y commitea SOLO alli.
-# Uso (desde el checkout principal):  bash 01-TOOLS/new-job.sh <job-id>
+# Uso (desde el checkout principal):  bash 01-TOOLS/new-job.sh <job-id> [--kind docs|code]
+#   --kind: code (por defecto) es un job de codigo; docs cambia la base documental del proyecto sin builder (RF-I9).
+#   job.json lleva `kind`; un job.json antiguo sin `kind` se lee como code.
 #   -> rama factory/<job-id>, worktree factory/worktrees/<job-id> (ignorada por git),
 #      carpeta de jobs factory/jobs/<job-id> y job.json.
 # La worktree se crea desde la rama BASE (origin/<base> si existe), NUNCA desde tu directorio de trabajo:
@@ -8,7 +10,20 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-JOB_ID="${1:?Uso: new-job.sh <job-id>}"
+JOB_ID=""; KIND=""; KIND_SET=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kind) [ "$KIND_SET" -eq 0 ] || { echo "ERROR: --kind se indica una sola vez" >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "ERROR: --kind necesita un valor (docs|code)" >&2; exit 2; }
+      KIND="$2"; KIND_SET=1; shift 2 ;;
+    -*) echo "ERROR: opcion desconocida: $1 (Uso: new-job.sh <job-id> [--kind docs|code])" >&2; exit 2 ;;
+    *) [ -z "$JOB_ID" ] || { echo "ERROR: sobra un argumento: $1 (Uso: new-job.sh <job-id> [--kind docs|code])" >&2; exit 2; }
+      JOB_ID="$1"; shift ;;
+  esac
+done
+[ -n "$JOB_ID" ] || { echo "Uso: new-job.sh <job-id> [--kind docs|code]" >&2; exit 2; }
+[ "$KIND_SET" -eq 1 ] || KIND=code
+case "$KIND" in docs|code) ;; *) echo "ERROR: --kind debe ser docs o code (tiene: '${KIND}')" >&2; exit 2 ;; esac
 [[ "$JOB_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$ ]] && [[ "$JOB_ID" != *..* ]] || { echo "ERROR: job-id invalido (letras, numeros, . _ -)" >&2; exit 2; }
 
 ROOT="$(factory_main_root)" || { echo "ERROR: no es un repositorio git" >&2; exit 1; }
@@ -35,10 +50,11 @@ if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then echo "ERROR: ya ex
 git worktree add -q -b "$BRANCH" "$WT" "$BASE_REF"
 JOB_DIR="$(factory_jobs_dir)/${JOB_ID}"
 mkdir -p "$JOB_DIR"
-node -e "require('fs').writeFileSync(process.argv[1], JSON.stringify({id:process.argv[2],branch:process.argv[3],worktree:process.argv[4],base:process.argv[5],created:new Date().toISOString()},null,2)+'\n')" \
-  "$JOB_DIR/job.json" "$JOB_ID" "$BRANCH" "$WT" "$BASE_REF"
+node -e "require('fs').writeFileSync(process.argv[1], JSON.stringify({id:process.argv[2],kind:process.argv[6],branch:process.argv[3],worktree:process.argv[4],base:process.argv[5],created:new Date().toISOString()},null,2)+'\n')" \
+  "$JOB_DIR/job.json" "$JOB_ID" "$BRANCH" "$WT" "$BASE_REF" "$KIND"
 
 echo "OK job ${JOB_ID}"
+echo "  kind:     ${KIND}"
 echo "  rama:     ${BRANCH} (desde ${BASE_REF})"
 echo "  worktree: ${WT}"
 echo "  jobs:     ${JOB_DIR}"

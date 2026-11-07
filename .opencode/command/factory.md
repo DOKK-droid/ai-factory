@@ -43,6 +43,10 @@ Argumentos recibidos: $ARGUMENTS
 | 13 | sin PR | `RUN: gh pr create --draft …` o `STOP: HUMAN_CREATE_PR` |
 | 14 | todo cumplido | `DONE` |
 
+## Job de documentación (`kind: docs`)
+
+Si `factory/jobs/<id>/job.json` dice `kind: docs` (lo crea `new-job.sh <id> --kind docs`, p. ej. `/factory-init`), el bucle es el mismo pero sin builder: el estado 2 delega en `system-analyst` (spec de documentación), el 4, el 6 y el 9 delegan en el agente dueño de cada documento, el 5 usa el gate de documentación (`checks.sh` lo elige solo), y entre el 10 y el 11 hay un `STOP: HUMAN_CONFIRM_PROJECT` para que el humano apruebe la base. Aparecen `DOCS_NEED_HUMAN`, `DOCS_JOB_INVALID` y, en cualquier job, `BASE_DOCS_BEHIND`: informa y espera.
+
 ## Reglas
 
 - Política por proyecto en `factory/project.json` (`require_spec_ok`, `max_rounds`, `spec_profile`, `human_review_surfaces`, páginas del Brain por agente). Solo la edita el humano.

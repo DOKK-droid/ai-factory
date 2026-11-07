@@ -15,7 +15,7 @@ export const REQS = (f) => path.join(f.wt, '02-DOCS/wiki/project/01-requisitos.m
 export function seedProject(f, { approve = true } = {}) {
   const p = makeProject();
   for (const rel of ['README.md', ...DOC_NAMES.map((d) => `02-DOCS/wiki/project/${d}.md`), '02-DOCS/wiki/project/discovery.md', '02-DOCS/wiki/sdd/decisions.md']) write(path.join(f.repo, rel), fs.readFileSync(path.join(p.root, rel), 'utf8'));
-  if (approve) { const r = run('node', [LINT, 'approve', ...DOC_NAMES, '--root', f.repo]); assert.equal(r.status, 0, r.stdout); }
+  if (approve) { const r = run('node', [LINT, 'approve', ...DOC_NAMES, '--root', f.repo, '--bootstrap']); assert.equal(r.status, 0, r.stdout); }
   git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-qm', 'base documental'); git(f.repo, 'push', '-q', 'origin', 'main');
 }
 /** Job con la base aprobada y un spec que cita REQ-F-1, REQ-F-2 y UC-2, ya confirmado (spec.ok). */

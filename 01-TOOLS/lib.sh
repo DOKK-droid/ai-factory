@@ -46,13 +46,40 @@ FACTORY_CURATOR_PATHS=(02-DOCS/wiki/jobs 02-DOCS/wiki/index.md 02-DOCS/wiki/sdd/
 FACTORY_PROJECT_DOC_PATHS=(02-DOCS/wiki/project)
 
 # factory_curator_pathspec: argumentos de git para EXCLUIR las paginas del curator de un diff o un log.
+# Con `docs` (job de documentacion) la base documental es el TRABAJO del job: solo la pagina y el indice del curator, la aprobacion
+# (project.ok) y la trazabilidad generada se excluyen; decisions.md y los documentos cuentan.
 factory_curator_excludes() {
-  local p; for p in "${FACTORY_CURATOR_PATHS[@]}" "${FACTORY_PROJECT_DOC_PATHS[@]}"; do printf '%s\n' ":(exclude)${p}"; done
+  local p
+  if [ "${1:-}" = docs ]; then
+    for p in 02-DOCS/wiki/jobs 02-DOCS/wiki/index.md 02-DOCS/wiki/project/project.ok 02-DOCS/wiki/project/trazabilidad.md; do printf '%s\n' ":(exclude)${p}"; done
+    return
+  fi
+  for p in "${FACTORY_CURATOR_PATHS[@]}" "${FACTORY_PROJECT_DOC_PATHS[@]}"; do printf '%s\n' ":(exclude)${p}"; done
+}
+
+# factory_job_kind [dir]: tipo del job, code o docs. FACTORY_JOB_KIND (la exporta next-step.sh tras leer job.json) o, sin ella, el `kind`
+# de job.json del job de la rama factory/<id> de <dir> (asi lo ven risk.sh y launch-reviewers.sh). Todo lo que no sea docs es code.
+factory_job_kind() {
+  if [ -n "${FACTORY_JOB_KIND:-}" ]; then printf '%s' "$FACTORY_JOB_KIND"; return; fi
+  local br jf; br="$(git -C "${1:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null)" || { printf code; return; }
+  case "$br" in factory/*) ;; *) printf code; return ;; esac
+  jf="$(factory_jobs_dir)/${br#factory/}/job.json"
+  if [ -f "$jf" ] && grep -q '"kind"[[:space:]]*:[[:space:]]*"docs"' "$jf" 2>/dev/null; then printf docs; else printf code; fi
+}
+
+# factory_only_estado_changed <sha> <head> <dir> <archivo>: 0 si lo unico que cambio en <archivo> son lineas `estado:` de la cabecera
+# (lo que escribe `project-lint approve`); el cuerpo y el resto de la cabecera (version, fecha...) son identicos.
+factory_only_estado_changed() {
+  local s="$1" h="$2" dir="$3" f="$4"
+  git -C "$dir" cat-file -e "${s}:${f}" 2>/dev/null && git -C "$dir" cat-file -e "${h}:${f}" 2>/dev/null || return 1
+  cmp -s <(git -C "$dir" show "${s}:${f}" 2>/dev/null | awk 'NR<=8 && /^estado:/ { next } { print }') \
+         <(git -C "$dir" show "${h}:${f}" 2>/dev/null | awk 'NR<=8 && /^estado:/ { next } { print }')
 }
 
 # factory_commit_fresh <sha> [head] [dir]: 0 si <sha> sigue vigente respecto a <head> (por defecto HEAD):
 # es el mismo commit, o es un ancestro y todo lo posterior solo toca paginas del curator (documentacion, no codigo).
 # Asi el commit del Brain que cierra el job no invalida el gate ni los reviews, pero cualquier cambio de codigo si.
+# En un job de documentacion (kind: docs) la base documental SI cuenta (es el trabajo), salvo project.ok, trazabilidad.md y el cambio de `estado:`.
 factory_commit_fresh() {
   local sha="$1" head="${2:-HEAD}" dir="${3:-.}" h s other
   [ -n "$sha" ] || return 1
@@ -60,6 +87,17 @@ factory_commit_fresh() {
   h="$(git -C "$dir" rev-parse -q --verify "${head}^{commit}" 2>/dev/null)" || return 1
   [ "$s" = "$h" ] && return 0
   git -C "$dir" merge-base --is-ancestor "$s" "$h" 2>/dev/null || return 1
+  if [ "$(factory_job_kind "$dir")" = docs ]; then
+    mapfile -t ex < <(factory_curator_excludes docs)
+    other="$(git -C "$dir" diff --name-only "$s" "$h" -- . "${ex[@]}" 2>/dev/null)" || return 1
+    local f
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      case "$f" in 02-DOCS/wiki/project/*.md) factory_only_estado_changed "$s" "$h" "$dir" "$f" && continue ;; esac
+      return 1
+    done <<< "$other"
+    return 0
+  fi
   mapfile -t ex < <(factory_curator_excludes)
   other="$(git -C "$dir" diff --name-only "$s" "$h" -- . "${ex[@]}" 2>/dev/null)" || return 1
   [ -z "$other" ]

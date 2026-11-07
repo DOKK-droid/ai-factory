@@ -52,7 +52,7 @@ test('dry-run: lista lo que haria y no escribe nada en el destino', () => {
 test('--apply: copia la maquinaria y crea el Brain limpio', () => {
   const d = installed();
   for (const f of ['01-TOOLS/next-step.sh', '.opencode/agent/orchestrator.md', '.opencode/plugins/factory-guard.js', 'factory/project.json', 'factory/scripts/command-guard.mjs',
-    '02-DOCS/wiki/sdd/methodology.md', '02-DOCS/wiki/sdd/spec-template.md', '02-DOCS/wiki/sdd/job-page-template.md', '02-DOCS/wiki/context.md', '02-DOCS/wiki/index.md',
+    '02-DOCS/wiki/sdd/methodology.md', '02-DOCS/wiki/sdd/spec-template.md', '02-DOCS/wiki/sdd/spec-docs-template.md', '02-DOCS/wiki/sdd/job-page-template.md', '02-DOCS/wiki/context.md', '02-DOCS/wiki/index.md',
     '.github/workflows/ci.yml', 'opencode.json', 'AGENTS.md', 'package.json', 'factory-agent', '03-SKILLS/factory-protocol/SKILL.md', 'factory/jobs/.gitkeep']) assert.ok(exists(d, f), `falta ${f}`);
   assert.ok(fs.statSync(path.join(d, '01-TOOLS/next-step.sh')).mode & 0o111, 'next-step.sh debe seguir ejecutable');
   assert.ok(fs.statSync(path.join(d, 'factory-agent')).mode & 0o111);
