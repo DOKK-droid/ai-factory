@@ -1,5 +1,7 @@
 # Propuesta de la rama 4: parche a `factory/config.json`
 
+> **Estado: aplicado** en la propia rama `feat/factory-init` por indicación expresa del humano (commit «roles de los seis agentes…»). Este documento queda como registro de qué cambia y por qué; `apply-models.js` gobierna ya esos seis agentes.
+
 `factory/config.json` lo edita solo el humano. La rama no lo modifica: se entrega en [`rama4-factory-init.patch`](rama4-factory-init.patch) (1 archivo, 7 líneas añadidas, ninguna cambiada ni borrada).
 
 ## Qué añade
