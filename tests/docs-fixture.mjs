@@ -43,16 +43,16 @@ ${alcance.map((a) => `- ${a}`).join('\n')}
 export const docsTasksText = (rows) => rows.map((r, i) => `- [ ] T${i + 1} (${r.doc}, ${r.agent}): cambiar ${r.ids}\n`).join('');
 
 /** Job docs con la base aprobada (seed) y el spec ya escrito (y confirmado si confirm). */
-export function docsJob({ project = DOCS_POLICY, approve = true, rows = undefined, adr = 'none', alcance = undefined, confirm = true, id = 'job-1' } = {}) {
+export function docsJob({ project = DOCS_POLICY, approve = true, rows = undefined, adr = 'none', alcance = undefined, confirm = true, id = 'job-1', stage = 'confirmed' } = {}) {
   const f = fx({ tools: true, project, kind: 'docs', id });
   seedProject(f, { approve });
-  f.newJob(); f.input();
+  f.newJob(); if (stage !== 'job') f.input();
   f.rows = rows || [ROW('REQ-F-2', '01-requisitos', 'system-analyst')];
   f.docsSpec = (o = {}) => {
     const rr = o.rows || f.rows; put(path.join(f.job, 'spec.md'), docsSpecText({ rows: rr, adr: o.adr ?? adr, alcance: o.alcance ?? alcance })); put(path.join(f.job, 'tasks.md'), o.tasks ?? docsTasksText(rr));
   };
-  f.docsSpec();
-  if (confirm) f.confirm();
+  if (stage === 'confirmed' || stage === 'spec') f.docsSpec();
+  if (confirm && stage === 'confirmed') f.confirm();
   f.file = (doc) => path.join(f.wt, doc === 'decisions' ? '02-DOCS/wiki/sdd/decisions.md' : `${PD}/${doc}.md`);
   /** Simula al agente dueño: cambia el cuerpo y, si el documento estaba aprobado, lo deja desactualizado con version nueva. */
   f.agentEdit = (doc, from, to, { stale = true } = {}) => {

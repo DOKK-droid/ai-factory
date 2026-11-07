@@ -198,7 +198,7 @@ export function drive(f, { agents = {}, maxSteps = 40, humans = {} } = {}) {
     } else if (r.kind === 'DELEGATE') {
       const agent = r.value.split('|')[0].trim().replace(/^@/, '');
       if (!play[agent]) throw new Error('agente sin simular: ' + agent);
-      play[agent]();
+      play[agent](r);
     } else throw new Error('salida inesperada: ' + r.raw);
   }
   throw new Error('el bucle no termino');
