@@ -56,3 +56,11 @@ test('sin job-id el gate es el de codigo (no hay job.json que consultar)', () =>
   const f = fx({ tools: true }); f.newJob(); f.input(); f.spec(); f.commit();
   const r = run('bash', [CHECKS], { cwd: f.wt, env: f.env({ FACTORY_TEST_CMD: 'exit 1' }) }); assert.equal(r.status, 1);
 });
+test('docs: si node no logra decir el kind de job.json (no imprime nada) el gate falla cerrado, no asume codigo', () => {
+  const f = ready();
+  const real = run('bash', ['-c', 'command -v node'], { encoding: 'utf8' }).stdout.trim();
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || '/tmp'), 'af-nodeshim-'));
+  fs.writeFileSync(path.join(dir, 'node'), `#!/usr/bin/env bash\nif [ "$1" = "-p" ] && [[ "$*" == *job.json* ]]; then exit 0; fi\nexec "${real}" "$@"\n`); fs.chmodSync(path.join(dir, 'node'), 0o755);
+  const r = run('bash', [CHECKS, f.id], { cwd: f.wt, env: f.env({ FACTORY_TEST_CMD: 'true', PATH: `${dir}:${process.env.PATH}` }) });
+  assert.equal(r.status, 1, r.stdout + r.stderr); assert.match(gateMd(f), /^GATE: FAIL/); assert.match(gateMd(f), /kind/);
+});
