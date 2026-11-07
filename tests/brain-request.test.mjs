@@ -255,7 +255,12 @@ test('scope-check.mjs y lib.sh declaran la misma lista de base documental', { sk
 
 // ---- next-step.sh
 const full = (extra = {}) => ({ require_spec_ok: true, spec_profile: 'full', ...extra });
-const nsJob = (stage, o = {}) => { const f = fx({ tools: true, project: full(o.project || {}), ...(o.fx || {}) }); if (o.seed) seedProject(f, o.seed === true ? {} : o.seed); f.upTo(stage); return f; };
+// Con la base aprobada (seed) el spec debe citarla en Implementa: (RF-I15), como exige spec-lint.
+const nsJob = (stage, o = {}) => {
+  const f = fx({ tools: true, project: full(o.project || {}), ...(o.fx || {}) });
+  if (o.seed) { seedProject(f, o.seed === true ? {} : o.seed); const spec = f.spec; f.spec = (x) => spec({ implementa: ['REQ-F-1', 'REQ-F-2'], ...x }); }
+  f.upTo(stage); return f;
+};
 test('next-step 1b: petición inválida => STOP BRAIN_REQUEST_INVALID, antes de spec.ok y del builder', { skip: miss(nsPatched) }, () => {
   const f = nsJob('confirmed'); f.request = (t) => put(path.join(f.job, 'brain-request.md'), t);
   f.request('basura\n'); const r = f.ns(); assert.equal(r.kind, 'STOP'); assert.equal(r.value, 'BRAIN_REQUEST_INVALID'); assert.equal(r.code, 2); assert.equal(r.state, 'brain'); assert.match(r.why.join(' '), /ningún bloque/);
