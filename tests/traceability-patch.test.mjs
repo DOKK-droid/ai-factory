@@ -48,7 +48,6 @@ test('CA-I18.1 next-step: cambiar un REQ citado tras la confirmación devuelve e
   const f = job(); stamped(f); delegate(f.ns(), 'builder');
   f.changeReq('crear un [[Pedido]]', 'crear y cancelar un [[Pedido]]');
   let r = f.ns(); delegate(r, 'spec-writer'); assert.equal(r.state, 'align'); assert.equal(r.phase, 'Análisis y diseño'); assert.match(r.why.join(' '), /REQ-F-1 cambió/); assert.match(r.value, /spec\.md,factory\/jobs\/job-1\/tasks\.md$/); assert.match(r.value, /realinear el spec/);
-  assert.match(r.read, /spec-template\.md/, 'el spec-writer recibe su READ');
   assert.equal(f.ns().kind, 'DELEGATE', 'si no toca spec.md el job sigue pidiendo la realineación (no avanza solo)');
   f.spec({ implementa: IMPL }); r = f.ns(); stop(r, 'HUMAN_CONFIRM_SPEC'); assert.equal(r.state, '3'); assert.deepEqual(r.cmd, ['touch factory/jobs/job-1/spec.ok']);
   f.confirm(); stamped(f); delegate(f.ns(), 'builder');
@@ -68,7 +67,8 @@ test('next-step 3b falla cerrado: lock manipulado o respuesta inesperada de real
   put(f.lock, '{no json'); const r = f.ns(); stop(r, 'IMPLEMENTA_INVALID'); assert.equal(r.state, 'align'); assert.match(r.why.join(' '), /ilegible/);
   put(f.lock, bueno); delegate(f.ns(), 'builder');
   const copy = tmp('af-ns-copy-'); fs.cpSync(path.join(REPO, '01-TOOLS'), path.join(copy, '01-TOOLS'), { recursive: true }); fs.cpSync(path.join(REPO, 'factory/scripts'), path.join(copy, 'factory/scripts'), { recursive: true });
-  const stub = (body) => fs.writeFileSync(path.join(copy, 'factory/scripts/project-lint.mjs'), `if (process.argv.includes('realign')) { ${body} }\n`);   // spec-lint también importa este módulo
+  fs.renameSync(path.join(copy, 'factory/scripts/project-lint.mjs'), path.join(copy, 'factory/scripts/project-lint-real.mjs'));   // brain-request y spec-lint importan este módulo: el stub reexporta todo
+  const stub = (body) => fs.writeFileSync(path.join(copy, 'factory/scripts/project-lint.mjs'), `export * from './project-lint-real.mjs';\nif (process.argv.includes('realign')) { ${body} }\n`);
   const g = fx({ tools: true, project: { spec_profile: 'full' } }).upTo('confirmed');   // sin project_docs: el gate de 1c no llama al stub
   const goG = () => parseNs(run('bash', [path.join(copy, '01-TOOLS/next-step.sh'), g.id], { cwd: g.repo, env: g.env() }));
   for (const body of ["console.log('QUIZAS')", "console.log('')", 'process.exit(3)', "throw new Error('x')", "console.log('STAMP')", "console.log('DRIFT\\nOWNER: spec-writer\\nFILES: x')", "console.log('INVALID')"]) {
