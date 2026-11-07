@@ -60,6 +60,7 @@ CREATE_ENTRIES=(
   02-DOCS/wiki/sdd/decisions.md
   02-DOCS/wiki/sdd/methodology.md
   02-DOCS/wiki/sdd/spec-template.md
+  02-DOCS/wiki/sdd/spec-docs-template.md
   02-DOCS/wiki/sdd/job-page-template.md
 )
 GITIGNORE_MARK='# --- AI Factory (install-into.sh) ---'
@@ -168,6 +169,7 @@ gen_index() {
 | ADRs | \`02-DOCS/wiki/sdd/decisions.md\` | Decisiones de arquitectura de este proyecto (el estado de un ADR nuevo lo fija el flujo: \`Aprobado\` si el humano confirmo el spec con \`spec.ok\`) |
 | metodologia | \`02-DOCS/wiki/sdd/methodology.md\` | Actores, fases, buenas practicas y definicion de hecho |
 | plantilla de spec | \`02-DOCS/wiki/sdd/spec-template.md\` | Estructura del spec (perfil \`full\`) |
+| plantilla de spec de documentacion | \`02-DOCS/wiki/sdd/spec-docs-template.md\` | Estructura del spec de un job de documentacion (\`kind: docs\`, perfil \`docs\`) |
 | plantilla de job | \`02-DOCS/wiki/sdd/job-page-template.md\` | Estructura de la pagina que documenta cada job |
 | documentacion por job | \`02-DOCS/wiki/jobs/<id>.md\` | Que se construyo en cada job; viaja en el PR del job |
 
@@ -253,7 +255,7 @@ generate() { # generate <ruta relativa> -> stdout
     02-DOCS/wiki/context.md) gen_context ;;
     02-DOCS/wiki/sdd/constitution.md) gen_constitution ;;
     02-DOCS/wiki/sdd/decisions.md) gen_decisions ;;
-    02-DOCS/wiki/sdd/methodology.md|02-DOCS/wiki/sdd/spec-template.md|02-DOCS/wiki/sdd/job-page-template.md) cat "${SRC}/$1" ;;
+    02-DOCS/wiki/sdd/methodology.md|02-DOCS/wiki/sdd/spec-template.md|02-DOCS/wiki/sdd/spec-docs-template.md|02-DOCS/wiki/sdd/job-page-template.md) cat "${SRC}/$1" ;;
     *) echo "ERROR interno: sin generador para $1" >&2; return 1 ;;
   esac
 }
