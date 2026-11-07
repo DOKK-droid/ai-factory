@@ -72,7 +72,7 @@ Las peticiones al Brain las lleva `next-step.sh`: si te manda un `DELEGATE` a un
 | `trace.md` + Brain del job (`02-DOCS/wiki/jobs/<id>.md`, ADR) | `@memory-curator` | Task, escribe EN LA WORKTREE; luego `RUN: … commit-brain.sh <id>` lo commitea para que viaje en el PR |
 | rama + PR borrador | tú, si `next-step.sh` lo pide | `git push -u origin factory/<id>` y `gh pr create --draft …` |
 
-Tú solo escribes `trace.md` (y solo si te lo piden). **Nunca** escribes `gate.md`, `job.json`, `round-N/review-*.md`, `decision.md`, `human.md`, `spec.ok`, `review.ok` ni `pr.url`: son evidencia o decisiones del humano. Escribir una a mano es fabricar un resultado, aunque "solo sea para continuar".
+Tú solo escribes `trace.md` (y solo si te lo piden). **Nunca** escribes `gate.md`, `job.json`, `round-N/review-*.md`, `decision.md`, `human.md`, `spec.ok`, `review.ok`, `implementa.lock` ni `pr.url`: son evidencia o decisiones del humano. Escribir una a mano es fabricar un resultado, aunque "solo sea para continuar".
 
 ## Reglas
 
