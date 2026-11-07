@@ -11,6 +11,7 @@
 | requisitos de la fábrica | `02-DOCS/wiki/sdd/factory-requirements.md` | RF-F1 a RF-F10: lo que debe garantizar la propia fábrica (no se copia a otros proyectos) |
 | plan de `/factory-init` | `02-DOCS/wiki/sdd/factory-init-plan.md` | Ramas, orden y comprobaciones para construir `/factory-init` y la base documental del proyecto (borrador) |
 | especificación de `/factory-init` | `02-DOCS/wiki/sdd/factory-init-spec.md` | RF-I1 a RF-I17: formatos, reglas de `project-lint`, protocolo de peticiones al Brain, agentes, RSC fijado (borrador) |
+| ramas 6b/6c y prueba real | `02-DOCS/wiki/sdd/rama6b-y-prueba-real.md` | Riesgos abiertos de la rama 6, la robustez prevista (6b, 6c) y el guion de la prueba real previa a la rama 7 (propuesto, sin medir) |
 | plantilla de spec | `02-DOCS/wiki/sdd/spec-template.md` | Estructura del spec (perfil `full`): actores, RF-n, diseño, ADR, trazabilidad |
 | plantilla de job | `02-DOCS/wiki/sdd/job-page-template.md` | Estructura de la página que documenta cada job |
 | documentación por job | `02-DOCS/wiki/jobs/<id>.md` | Qué se construyó, diseño, pruebas (con el commit del gate) y lecciones de cada job; viaja en el PR del job |
