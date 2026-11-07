@@ -18,6 +18,10 @@ Los identificadores de esta especificación son `RF-I<n>` (requisitos) y `CA-I<n
 | D6 | Modelos: discovery y architect = `go-approver`; system-analyst, domain-modeler, deployment-planner = `sol`; consistency-auditor = `go-security`. `webfetch: ask` solo para discovery, sin `websearch`. **Sin A/B: es un supuesto** | humano, 2026-11-06 |
 | D7 | Apagado de RSC por marcadores más `optOuts` en `.rsc.json` | humano, 2026-11-06 |
 | D9 | **La documentación manda.** Ningún flujo de la fábrica empieza sin la base documental aprobada de punta a punta; todo artefacto (spec, tareas, código) deriva de ella y la cita por ID; un cambio se decide primero en la documentación, con aprobación humana, y solo después vuelve a la fábrica para realinear los artefactos (§1.1) | humano, 2026-11-06 |
+| D10 | El job `docs` lleva un `spec.md` **mínimo pero detallado** (Objetivo, Cambio solicitado, Documentos afectados como tabla `ID | Documento | Agente`, Impacto en jobs, Criterios numerados y Alcance dentro de la base) con su propio perfil `docs` de `spec-lint`; reutiliza gate, reviewers y riesgo sin tocarlos | humano, 2026-11-07 |
+| D11 | `project-lint approve` se niega en una rama que no es `factory/*` de un repo con rama base; `--bootstrap` lo permite y deja constancia. Fuera de un repo git no cambia. Paso opcional de CI (comentado) que falla un PR que toca la base desde una rama no `factory/*` | humano, 2026-11-07 |
+| D12 | Parche solo para `next-step.sh` y `lib.sh`; directo para `new-job.sh`, `checks.sh`, `docs-job.mjs`, `project-lint`, `spec-lint`, `init-project.sh`, plantillas y prompts | humano, 2026-11-07 |
+| D13 | Un cambio de requisito nacido de un prompt arranca el job docs directamente desde `input.md`; lo no confirmado queda `[PENDIENTE]`/`[PROPUESTO]` y el gate no pasa hasta que el humano lo resuelva. `discovery` y `/factory-init` quedan para el arranque del proyecto y el modo D | humano, 2026-11-07 |
 | D8 | **A confirmar.** La frescura de documentos versionados se mide por hash de contenido, no por mtime (ver §5.4). Se mantiene mtime solo para marcas locales ignoradas por git (`brain.ok`) | propuesta |
 
 ### 1.1 Ciclo de cambio (D9)
@@ -29,9 +33,9 @@ Los identificadores de esta especificación son `RF-I<n>` (requisitos) y `CA-I<n
 | 3 | Un agente ve que el código o el spec contradicen o amplían la base: **no la edita**, escribe `brain-request.md` y el job se detiene hasta `brain.ok` (humano) | builder, spec-writer, approver | rama 2 (hecho) |
 | 4 | Con `brain.ok`, el especialista dueño de cada documento lo actualiza; `project-lint` valida; el humano re-aprueba (`project.ok`) | especialistas + humano | rama 2 y 4 (hecho) |
 | 5 | Solo entonces vuelve la fábrica: los artefactos que citan un ID cambiado quedan **desactualizados** y se realinean: el job en curso vuelve al spec-writer, el humano reconfirma el spec y se repiten gate, reviews y approver (que decide); los jobs entregados salen como «requiere revisión» en `project-status` | next-step, spec-writer, approver | **rama 5** (hecho; el bloque de `next-step.sh` es un parche pendiente de aplicar) |
-| 6 | Un cambio que no nace de un job (requisito nuevo, rediseño) se hace con un job de documentación, con las mismas aprobaciones | humano + discovery | rama 6 |
+| 6 | Un cambio que no nace de un job (requisito nuevo, rediseño) se hace con un **job de documentación** (`new-job.sh <id> --kind docs`): `input.md` → spec `docs` (system-analyst) → `spec.ok` → los agentes dueños de cada documento (en vez del builder) → commit con `commit-brain.sh --project` → gate de documentación → los 4 reviewers, approver y human-gate de siempre → `STOP: HUMAN_CONFIRM_PROJECT` con `project-lint approve` (el humano aprueba la base) → página del curator → push → PR. Si algo no está confirmado queda `[PENDIENTE]`/`[PROPUESTO]` y el gate no pasa (`STOP: DOCS_NEED_HUMAN`) | humano + system-analyst + dueños | **rama 6** (hecho; `next-step.sh` y `lib.sh` son un parche pendiente de aplicar) |
 
-Lo que hoy **no** cubre el ciclo y las ramas siguientes deben cerrar: (a) cambiar un documento aprobado no invalida un `spec.ok` ya dado; (b) la worktree de un job lleva la base tal como estaba en la rama base al crearse, así que una base actualizada después en `main` no llega al job en curso hasta que se rebasa; (c) nada impide hoy que un humano apruebe un cambio de requisito sin pasar por un job de documentación (la protección es `project.ok` y el PR).
+Huecos del ciclo y cómo se cerraron: (a) cambiar un documento aprobado no invalidaba un `spec.ok` ya dado → rama 5 (`implementa.lock`, RF-I18); (b) la worktree de un job lleva la base tal como estaba al crearse, así que una base actualizada después en `main` no llegaba al job en curso → rama 6: `STOP: BASE_DOCS_BEHIND` con `CMD: git -C factory/worktrees/<id> rebase <base>` (lo ejecuta el humano; compara con el ref local, falla cerrado si no puede calcularlo; aplica a jobs de cualquier tipo); (c) nada impedía aprobar un cambio de requisito sin job de documentación → rama 6: `project-lint approve` se niega fuera de una worktree `factory/*` salvo `--bootstrap` (D11) y hay un paso opcional de CI. Lo que el ciclo **no** impide: un humano con acceso al repo puede usar `--bootstrap` o editar `project.ok` a mano; la protección final sigue siendo el PR y su revisión.
 
 ## 2. Alcance y no-objetivos
 
@@ -51,7 +55,7 @@ Fuera: generar código; sustituir el spec de cada job; ejecutar nunca `sudo`, `i
 | RF-I6 | `index.md` se genera desde las cabeceras de las páginas; no se edita a mano (§6) | 1 |
 | RF-I7 | Un agente que detecta que el código contradice o amplía el Brain escribe `brain-request.md`; el job se detiene hasta `brain.ok` (§7) | 2 |
 | RF-I8 | Con `project_docs: required`, `next-step.sh` responde `STOP: HUMAN_CONFIRM_PROJECT` hasta que `project-lint gate` pasa (§8) | 2 |
-| RF-I9 | Un «job de documentación» (`kind: docs`) cambia la base del proyecto con rama `factory/<id>`, mismo pipeline y PR | 6 |
+| RF-I9 | Un «job de documentación» (`kind: docs`, en `job.json`; ausente = `code`) cambia la base del proyecto con rama `factory/<id>`, mismo pipeline y PR, con los agentes dueños de cada documento en lugar del builder, el spec en perfil `docs` y la aprobación humana de la base al final (§1.1 paso 6, §8.1) | 6 |
 | RF-I10 | `init-project.sh` detecta el modo, comprueba requisitos, instala solo lo local y seguro preguntando, es idempotente y reanudable (§9) | 4 |
 | RF-I11 | `/factory-init` abre el agente `discovery`, que explora, investiga y formula (§10.1) | 4 |
 | RF-I12 | Seis agentes con permisos mínimos y archivos propios (§10) | 4 |
@@ -165,7 +169,7 @@ node factory/scripts/project-lint.mjs check   [--dir <carpeta>] [--strict]
 node factory/scripts/project-lint.mjs state   [--dir <carpeta>]      # KEY=VALUE, lo consume init-project.sh
 node factory/scripts/project-lint.mjs impact  <ID|documento>         # si cambias X, revisa Y
 node factory/scripts/project-lint.mjs trace   [--write]              # trazabilidad.md
-node factory/scripts/project-lint.mjs approve <documento...>         # humano: registra hash y estado
+node factory/scripts/project-lint.mjs approve <documento...> [--bootstrap]  # humano: registra hash y estado; solo en una rama factory/* (o --bootstrap)
 node factory/scripts/project-lint.mjs gate                           # 0 si los 7 documentos están aprobados y frescos
 ```
 
@@ -233,6 +237,25 @@ Cambios de proyecto sin job (requisitos nuevos, rediseños): se hacen con un job
 
 `factory/project.json`: `"project_docs": "off" | "required"`; ausente = `off`. Con `required` (y, desde la rama 6, un job que no es `kind: docs`), `next-step.sh` ejecuta `project-lint gate --root <worktree>` antes del estado 2 (bloque 1c) y, si falla, `STOP: HUMAN_CONFIRM_PROJECT` con el resultado del gate en `WHY:` y, solo si hay documentos en estado `LISTO`, `CMD: node factory/scripts/project-lint.mjs approve <esos documentos>` (lo ejecuta el humano; el guard impide que lo ejecute un agente). Un valor inválido es `PROJECT_INVALID` (fallar hacia el lado seguro). `/factory-init` termina imprimiendo el diff de una línea que pone `required`; lo aplica el humano.
 
+### 8.1 El job de documentación (`kind: docs`)
+
+`job.json` lleva `kind` (`code` por defecto; otro valor distinto de `code` y `docs` es `STOP: JOB_INCONSISTENT`). En un job `docs` el bloque 1c **no aplica** (la base es justo lo que cambia) y se evalúa al final, entre el human-gate y el curator (estado 10b): `docs-job.mjs state --phase approve` devuelve `OK` si la base está aprobada y fresca, o `CONFIRM`, que `next-step.sh` traduce a `STOP: HUMAN_CONFIRM_PROJECT` con el `CMD` `cd factory/worktrees/<id> && node factory/scripts/project-lint.mjs approve <documentos LISTO o DESACTUALIZADO sin errores>`. El `CMD` del 1c de un job de código lleva ahora ese mismo `cd` (medido ejecutando: sin él, `approve` escribía `project.ok` en el checkout principal y el STOP no se resolvía nunca).
+
+Toda la lógica vive en `factory/scripts/docs-job.mjs state --phase work|fix|changes|approve` (como `brain-request.mjs`); `next-step.sh` solo traduce la primera palabra y falla cerrado con cualquier otra (`STOP: DOCS_JOB_INVALID`):
+
+| Estado de `next-step.sh` | Qué hace en un job `docs` |
+|---|---|
+| 2 | `DELEGATE` a `system-analyst` para `spec.md` y `tasks.md` (perfil `docs` de `spec-lint`, plantilla `spec-docs-template.md`) |
+| 4 (`--phase work`) | `COMMIT` (RUN `commit-brain.sh --project`), `WORK` (el dueño del primer documento afectado sin trabajo, o que sigue siendo plantilla), `ALIGN` (el dueño de un documento aprobado que quedó incoherente: errores de `project-lint` en la base ya aprobada), `TRACE` (RUN `project-lint trace --write` si `trazabilidad.md` existe y está desfasada), `READY` |
+| 5 | `checks.sh` elige el gate de documentación por `job.json`: alcance dentro de la base y de lo que declara el `Alcance`, `project-lint check --strict`, plantillas sin rellenar y marcadores `[PENDIENTE]`/`[PROPUESTO]`/`[INFERIDO]` en los documentos tocados; no ejecuta los tests del proyecto; mismo `gate.md` |
+| 6 (`--phase fix`) | `WORK` al dueño del documento que falla, `TRACE`, o `HUMAN` (`STOP: DOCS_NEED_HUMAN`: marcadores abiertos o archivos fuera de alcance) |
+| 9 CHANGES (`--phase changes`) | `WORK` al dueño del primer documento (en orden de dependencia) que nombra `decision.md`, o del primer documento afectado |
+| 10b (`--phase approve`) | ver arriba |
+
+`BASE_DOCS_BEHIND` (estado 0, todos los jobs): si `<base>` cambió algo bajo `02-DOCS/wiki/project/` desde el merge-base con la rama del job, `STOP` con `CMD: git -C factory/worktrees/<id> rebase <base>`; solo lectura, contra el ref local (haz `git fetch`); falla cerrado si no hay merge-base.
+
+**Frescura (`lib.sh`).** `factory_commit_fresh` ignoraba todo commit que solo toca la base documental. En un job `docs` esos commits son el trabajo: solo `project.ok`, `trazabilidad.md`, la página y el índice del curator y un commit que solo cambia la línea `estado:` de la cabecera (lo que escribe `approve`) dejan vigentes el gate y los reviews. Sin esa excepción de `estado:` el commit de aprobación invalidaría los reviews y habría bucle. `FACTORY_JOB_KIND` la exporta `next-step.sh`; `risk.sh` y `launch-reviewers.sh` la deducen de `job.json`.
+
 ## 9. `init-project.sh`
 
 `bash factory/scripts/init-project.sh [--dir <proyecto>] [--apply <paso>] [--yes]`. Dry-run por defecto: informa, no escribe. Salida `CLAVE=valor`, una por línea, más líneas `STEP:`/`MANUAL:` legibles.
@@ -265,7 +288,7 @@ Se ignoran `.git`, `node_modules`, `.worktrees`, `factory/worktrees`, `.rsc`, `.
 | `deps` | `npm ci` si hay `package-lock.json`; en otros gestores solo imprime el comando | |
 | `hooks` | `npm run hooks:install` o `bash .hooks/install-git-hooks.sh` | |
 | `rsc` | `rsc-pin.sh --apply` | §11 |
-| `workspace` | crea el job de documentación `init-<aammdd>-<4 hex>` con `new-job.sh` (rama `factory/<id>`, worktree) | si ya hay uno abierto con ese prefijo, lo reutiliza (`JOB=<id>`) |
+| `workspace` | crea el job de documentación `init-<aammdd>-<4 hex>` con `new-job.sh <id> --kind docs` (rama `factory/<id>`, worktree) | si ya hay uno abierto con ese prefijo, lo reutiliza (`JOB=<id>`) |
 
 «Preguntando antes»: el agente `discovery` tiene `ask` sobre `init-project.sh --apply*`, así que cada paso exige la aprobación del humano en OpenCode; el script no pide nada por su cuenta.
 
@@ -280,7 +303,7 @@ La última línea es `HANDOFF=discovery MODE=<A|B|C|D> JOB=<id> NEXT=<documento>
 | Id | Modo | Modelo (tier) | Edita (en `factory/worktrees/*/`) | Notas |
 |---|---|---|---|---|
 | `discovery` | primary | `go-approver` | `02-DOCS/wiki/project/discovery.md` | único con `task` (a los especialistas) y con `webfetch: ask`; `bash`: `init-project.sh`, `project-lint` salvo `approve`, `git log/ls-files/show`, `rg` |
-| `system-analyst` | subagent | `sol` | `00-vision.md`, `01-requisitos.md`, `02-casos-de-uso.md` | `webfetch: deny` |
+| `system-analyst` | subagent | `sol` | `00-vision.md`, `01-requisitos.md`, `02-casos-de-uso.md`; y, en un job `docs`, `factory/jobs/<id>/spec.md` y `tasks.md` (nunca desde dentro de una worktree) | `webfetch: deny`; `bash`: `project-lint check/impact/state` y `project-status.mjs` |
 | `domain-modeler` | subagent | `sol` | `03-dominio.md`, `05-datos.md` | `webfetch: deny` |
 | `architect` | subagent | `go-approver` | `04-arquitectura.md`, `02-DOCS/wiki/sdd/decisions.md` | `webfetch: deny` |
 | `deployment-planner` | subagent | `sol` | `06-despliegue.md` | `webfetch: deny` |
@@ -367,5 +390,5 @@ Cada código `PLxxx` tiene un test que lo provoca y otro que comprueba que el ca
 | RF-I10, I11, I12, I17 | 4 | CA-I10.1 las cuatro fixtures dan el `MODE` esperado; CA-I10.2 repetir el script no cambia nada; CA-I10.3 cero llamadas a `sudo` |
 | RF-I18 | 5 | CA-I18.1 cambiar `REQ-F-3` tras `spec.ok` devuelve el job a `spec-writer`; CA-I18.2 cambiar `REQ-F-9`, que el spec no cita, no lo toca |
 | RF-I15 | 5 | CA-I15.1 RF sin `Implementa:` → error de `spec-lint`; CA-I15.2 el estado de un REQ cambia al aparecer su job |
-| RF-I9 | 6 | CA-I9.1 un job `docs` llega a PR sin builder |
+| RF-I9 | 6 | CA-I9.1 un job `docs` llega a PR sin builder (test E2E con `drive`, con el parche aplicado); CA-I9.2 un job de código recorre los mismos estados que antes (los tests anteriores siguen en verde); CA-I9.3 el commit de aprobación no repite gate ni reviews |
 | RF-I16 | todas | informe de mutaciones por rama |
