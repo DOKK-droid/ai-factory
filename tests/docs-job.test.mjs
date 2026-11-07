@@ -198,3 +198,15 @@ test('gate: un documento de la base que falta suspende (check --strict exige los
   const h = docsJob(); h.agentEdit('01-requisitos', ...REQ2); h.commitProject(); h.marcarDesactualizado('02-casos-de-uso'); write(path.join(h.wt, PD, 'project.ok'), '{ no es json'); h.commitProject();
   g = gate(h); assert.equal(g.code, 1); assert.match(g.out, /SINTAXIS 02-DOCS\/wiki\/project\/project\.ok: JSON invalido/);
 });
+
+test('work: un error en un documento que aun no esta aprobado no provoca ALIGN (lo ve el gate); solo se vigila la base ya aprobada', () => {
+  const f = docsJob({ approve: false }); f.agentEdit('01-requisitos', 'debe listar los pedidos.', 'debe listar los pedidos de UC-99.', { stale: false }); f.commitProject();
+  assert.equal(f.docsState().first, 'READY');
+});
+test('approve: un documento desactualizado que aun tiene [PENDIENTE] no se ofrece para aprobar', () => {
+  const f = docsJob(); f.agentEdit('01-requisitos', ...REQ2); f.agentEdit('01-requisitos', '[FUENTE: discovery.md#Q-1]', '[PENDIENTE]'); f.commitProject(); f.marcarDesactualizado('02-casos-de-uso'); f.commitProject();
+  const r = f.docsState('approve'); assert.equal(r.first, 'CONFIRM', r.raw); assert.deepEqual(r.get('CMD'), ['cd factory/worktrees/job-1 && node factory/scripts/project-lint.mjs approve 02-casos-de-uso']);
+});
+test('gate: un job que no cambia nada de la base documental no pasa', () => {
+  const g = gate(docsJob()); assert.equal(g.code, 1); assert.match(g.out, /el job no cambia la base documental/);
+});

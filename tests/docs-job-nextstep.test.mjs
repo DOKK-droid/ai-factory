@@ -146,7 +146,7 @@ test('lib.sh docs: estado y cuerpo juntos, version, otros documentos, decisions.
   for (const [name, rel, fn] of [
     ['estado + cuerpo', `${PD}/01-requisitos.md`, (t) => t.replace(/^estado: \w+$/m, 'estado: aprobado').replace('filtrar', 'filtrar y')],
     ['version', `${PD}/01-requisitos.md`, (t) => t.replace(/^version: .*$/m, 'version: 9.9.9')],
-    ['una linea estado en el cuerpo', `${PD}/01-requisitos.md`, (t) => t + '\nestado: aprobado\n'],
+    ['una linea estado en el cuerpo', `${PD}/01-requisitos.md`, (t) => t + 'estado: aprobado\n'],
     ['decisions.md', '02-DOCS/wiki/sdd/decisions.md', (t) => t + '\n## ADR-002: x\n'],
     ['codigo', 'src/app.js', (t) => t + '//x\n'],
   ]) { const f = worked(); const sha = f.head(); commitFile(f, rel, fn); assert.equal(fresh(f, sha, E), false, name); }
@@ -305,4 +305,10 @@ test('estado 11: el curator de un job docs deja su pagina en el Brain y cita el 
   assert.equal(cur.length, 3); assert.match(cur[0].why.join(' '), /falta trace\.md|escribir 02-DOCS\/wiki\/jobs\/job-1\.md/); assert.match(cur[0].value, /NO edites 02-DOCS\/wiki\/project/);
   assert.match(cur[1].why.join(' '), /job de documentacion: la linea Brain: debe incluir 02-DOCS\/wiki\/jobs\/job-1\.md/);
   assert.match(cur[2].why.join(' '), /no cita el commit del gate/);
+});
+
+test('BASE_DOCS_BEHIND: falla cerrado si git no puede comparar las bases (objeto de arbol que falta)', { skip: SK }, () => {
+  const f = docsJob(); const tree = git(f.repo, 'rev-parse', 'origin/main^{tree}').trim(); const obj = path.join(f.repo, '.git/objects', tree.slice(0, 2), tree.slice(2));
+  assert.ok(fs.existsSync(obj), 'objeto suelto'); fs.chmodSync(obj, 0o644); fs.rmSync(obj);
+  const r = f.ns(); stop(r, 'BASE_DOCS_BEHIND'); assert.match(r.why.join(' '), /no pude comparar/);
 });
