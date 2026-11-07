@@ -51,10 +51,16 @@ export function section(text, key) {
 }
 const bullets = (body) => (body || []).filter((l) => /^\s*[-*]\s+\S/.test(l)).map((l) => l.replace(/^\s*[-*]\s+/, '').trim());
 export const surface = (t) => ((String(t).match(/^surface:\s*(.+?)\s*$/im) || [])[1] || '').toLowerCase();
+// Corta lo que sigue a un comentario HTML (abierto o no) en una linea: se usa en rutas de Alcance, donde la plantilla
+// lleva un comentario al lado. Con indexOf y no con una regexp: no hay nada que "sanear", solo quedarse con el prefijo.
+export const sinComentarioHtml = (s) => { const i = String(s).indexOf('<!--'); return (i < 0 ? String(s) : String(s).slice(0, i)).trimEnd(); };
+// Quita los comentarios HTML cerrados repitiendo hasta que no quede ninguno: una sola pasada deja uno nuevo
+// cuando se anidan ('<!<!-- a -->-- b -->'). Uno sin cerrar se queda, y entonces el valor no es 'none' (falla cerrado).
+const quitaComentarios = (s) => { let v = String(s); for (let prev = null; prev !== v;) { prev = v; v = v.replace(/<!--[\s\S]*?-->/g, ''); } return v; };
 export const adr = (t) => {
   let v = (String(t).match(/^adr:\s*(.*?)\s*$/im) || [])[1];
   if (v === undefined) return null;               // sin linea ADR
-  v = v.replace(/<!--.*?-->/g, '').trim();        // la plantilla lleva un comentario HTML al lado
+  v = quitaComentarios(v).trim();                 // la plantilla lleva un comentario HTML al lado
   return v === '' || /^(none|ninguno|ninguna|n\/a|no)$/i.test(v) ? 'none' : v;
 };
 export const ID_IMPLEMENTA = /^(?:REQ-F-\d+|REQ-NF-\d+|UC-\d+|ENT-\d+)$/;
@@ -151,12 +157,12 @@ function lintDocs(spec, tasks, ctx) {
   const entries = bullets(al);
   if (al === null || !entries.length) p.push("sin seccion 'Alcance' con al menos una ruta (- 02-DOCS/wiki/project/**)");
   for (const raw of entries) {
-    const e = raw.replace(/`/g, '').replace(/\s+<!--.*$/, '').trim();
+    const e = sinComentarioHtml(raw.replace(/`/g, '')).trim();
     if (e.startsWith('/') || e.split('/').includes('..') || e === '**' || e === '*') p.push(`Alcance: '${e}' sale de la base documental (solo ${DOCS_DIR}/ y, con ADR, ${DECISIONS})`);
     else if (e === DECISIONS) { if (adrV === null || adrV === 'none') p.push(`Alcance: ${DECISIONS} solo vale si el spec declara un ADR`); }
     else if (!e.startsWith(`${DOCS_DIR}/`)) p.push(`Alcance: '${e}' esta fuera de la base documental (solo ${DOCS_DIR}/ y, con ADR, ${DECISIONS})`);
   }
-  if (adrV && adrV !== 'none' && !entries.some((x) => x.replace(/`/g, '').replace(/\s+<!--.*$/, '').trim() === DECISIONS)) p.push(`ADR declarado: ${DECISIONS} debe figurar en Alcance`);
+  if (adrV && adrV !== 'none' && !entries.some((x) => sinComentarioHtml(x.replace(/`/g, '')).trim() === DECISIONS)) p.push(`ADR declarado: ${DECISIONS} debe figurar en Alcance`);
 
   if (!String(tasks).trim()) p.push('falta tasks.md o esta vacio');
   else for (const d of new Set(rows.map((r) => r.doc).filter((d) => known.has(d)))) if (!String(tasks).includes(d)) p.push(`tasks.md no nombra el documento ${d} (una tarea por documento afectado, con su dueño)`);

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { REPO, tmp, write, run } from './helpers.mjs';
 import { makeProject } from './project-fixture.mjs';
-import { lint, affectedDocs, isDocsSpec, summary } from '../factory/scripts/spec-lint.mjs';
+import { lint, affectedDocs, isDocsSpec, summary, adr, sinComentarioHtml } from '../factory/scripts/spec-lint.mjs';
 import { DOCS, OWNERS } from '../factory/scripts/project-lint.mjs';
 
 const SPEC_LINT = path.join(REPO, 'factory/scripts/spec-lint.mjs');
@@ -95,4 +95,20 @@ test('los perfiles standard y full no cambian por la existencia del perfil docs'
   const std = '# S\nSurface: none\n\n## Criterios\n1. a\n\nAlcance:\n- src/**\n';
   assert.deepEqual(lint(std, '- [ ] t', 'standard'), []);
   assert.ok(lint(std, '- [ ] t', 'full').length > 0);
+});
+
+test('comentarios HTML: se corta lo que sigue a <!-- en una ruta de Alcance (con o sin espacio) y los anidados no dejan uno nuevo en la linea ADR', () => {
+  assert.equal(sinComentarioHtml('02-DOCS/wiki/project/** <!-- nota -->'), '02-DOCS/wiki/project/**');
+  assert.equal(sinComentarioHtml('02-DOCS/wiki/project/**<!-- nota -->'), '02-DOCS/wiki/project/**', 'pegado a la ruta tambien');
+  assert.equal(sinComentarioHtml('a/b <!-- sin cerrar'), 'a/b'); assert.equal(sinComentarioHtml('a/b'), 'a/b');
+  assert.deepEqual(probs(sub('- 02-DOCS/wiki/project/**\n', '- 02-DOCS/wiki/project/**<!-- nota -->\n')), [], 'una ruta valida con el comentario pegado no es un error');
+  assert.ok(probs(sub('- 02-DOCS/wiki/project/**\n', '- src/** <!-- nota -->\n')).some((p) => /Alcance/.test(p) && p.includes("'src/**'")), 'el comentario no esconde una ruta fuera de la base');
+  const dec = (suf) => sub('ADR: none', 'ADR: Cancelacion por eventos', sub('- 02-DOCS/wiki/project/**\n', `- 02-DOCS/wiki/project/**\n- 02-DOCS/wiki/sdd/decisions.md${suf}\n`)).replace('| ENT-1 | 03-dominio | domain-modeler |', '| ENT-1 | 03-dominio | domain-modeler |\n| nuevo | decisions | architect |');
+  const T = TASKS + '- [ ] T4 (decisions, architect): registrar el ADR\n';
+  assert.deepEqual(probs(dec(''), T), [], 'base: decisions.md con ADR y fila');
+  assert.deepEqual(probs(dec('<!-- nota -->'), T), [], 'decisions.md con el comentario pegado sigue siendo decisions.md');
+  assert.deepEqual(probs(dec(' <!-- nota -->'), T), []);
+  assert.equal(adr('ADR: none <!-- ninguno -->'), 'none'); assert.equal(adr('ADR: <!-- a --><!-- b -->'), 'none');
+  assert.equal(adr('ADR: <!<!-- a -->-- b -->'), 'none', 'el comentario que aparece al quitar otro tambien se quita');
+  assert.equal(adr('ADR: Usar clamp <!-- sin cerrar'), 'Usar clamp <!-- sin cerrar', 'un comentario sin cerrar se queda: el valor no es none (falla cerrado)');
 });

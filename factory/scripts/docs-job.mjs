@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { analyze, gate as projectGate, DOCS, OWNERS, fmt } from './project-lint.mjs';
-import { affectedDocs, adr as specAdr } from './spec-lint.mjs';
+import { affectedDocs, adr as specAdr, sinComentarioHtml } from './spec-lint.mjs';
 import { dirtyProject, PROJECT_DIR, DECISIONS } from './brain-request.mjs';
 import { parseScope, globToRegExp, listChanges } from './scope-check.mjs';
 
@@ -102,7 +102,7 @@ function stateFix(c) {
       open.length ? `hay ${open.length} marcador(es) sin resolver ([PENDIENTE]/[PROPUESTO]/[INFERIDO]) en los documentos tocados; solo el humano los confirma (respondiendo a discovery o editando el documento):` : '',
       ...open.slice(0, 8).map((l) => `  ${flat(l, 160)}`),
       out.length ? `hay ${out.length} archivo(s) cambiados fuera del alcance del spec; un agente no los revierte: reviertelos tu o amplia el spec:` : '',
-      ...out.slice(0, 8).map((l) => `  ${l.replace('\t', ' ')}`),
+      ...out.slice(0, 8).map((l) => `  ${l.replace(/\t/g, ' ')}`),
     ].filter(Boolean).join('\n')]]);
   }
   const pls = lines.map((l) => l.match(PL_LINE)).filter(Boolean).map((m) => ({ code: m[1], doc: m[2].replace(/\.md$/, ''), line: flat(m[0], 200) }));
@@ -168,7 +168,7 @@ export function gateRun({ jobDir, mergeBase, root = process.cwd() }) {
   const specText = read(path.join(jobDir, 'spec.md'));
   if (!specText) { out.push(`-> alcance: no existe ${path.join(jobDir, 'spec.md')}`); fail('alcance'); return { out, ok: false }; }
   const scope = parseScope(specText);
-  const globs = scope.globs.map((g) => g.replace(/\s*<!--.*$/, '')).map((g) => ({ g, re: globToRegExp(g) }));
+  const globs = scope.globs.map((g) => sinComentarioHtml(g)).map((g) => ({ g, re: globToRegExp(g) }));
   const adrTitle = specAdr(specText);
   const changes = listChanges(mergeBase, root);
   const inBase = changes.filter((c) => c.path.startsWith(`${PROJECT_DIR}/`));

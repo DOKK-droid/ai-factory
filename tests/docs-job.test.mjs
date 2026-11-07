@@ -100,6 +100,8 @@ test('fix: marcadores abiertos o ediciones fuera de alcance son del humano, no d
   const f = docsJob(); gateMd(f, 'ABIERTO 01-requisitos.md:12 [PENDIENTE] ¿cuánto tarda?\nPL021 E 01-requisitos.md:12 algo');
   let r = f.docsState('fix'); assert.equal(r.first, 'HUMAN', r.raw); assert.match(r.get('WHY').join(' '), /\[PENDIENTE\]/); assert.match(r.get('WHY').join(' '), /01-requisitos\.md:12/);
   gateMd(f, 'FUERA_DE_ALCANCE\tsrc/app.js'); r = f.docsState('fix'); assert.equal(r.first, 'HUMAN'); assert.match(r.get('WHY').join(' '), /src\/app\.js/);
+  gateMd(f, 'FUERA_DE_ALCANCE\tsrc/a\tb\tc.js'); r = f.docsState('fix'); assert.equal(r.first, 'HUMAN');
+  assert.ok(r.get('WHY').join('\n').includes('FUERA_DE_ALCANCE src/a b c.js'), 'todos los tabuladores se sustituyen, no solo el primero: ' + r.raw);
 });
 test('fix: si solo falla la trazabilidad generada se regenera (TRACE); un gate ilegible o sin motivo reconocible es INVALID', () => {
   const f = docsJob(); gateMd(f, 'PL061 E trazabilidad.md:1 no coincide con lo generado');
