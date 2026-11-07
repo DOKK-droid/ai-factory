@@ -3,6 +3,7 @@
   "max_rounds": 3,
   "spec_profile": "full",
   "human_review_surfaces": [],
+  "project_docs": "required",
   "brain": {
     "default": ["02-DOCS/wiki/index.md"],
     "agents": {

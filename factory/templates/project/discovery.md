@@ -17,7 +17,7 @@ responsable: discovery
 <!-- RELLENAR: P-1: propuesta con alternativas y una recomendada [PROPUESTO] -->
 
 ## Preguntas
-<!-- RELLENAR: por rondas de máximo 5, con opciones:
+<!-- RELLENAR: por rondas de hasta 10, con opciones:
 ### Ronda 1
 - Q-1 [PENDIENTE]: ¿...? Opciones: a) ... b) ... Recomendada: a)
   Respuesta del humano (fecha): ... -->

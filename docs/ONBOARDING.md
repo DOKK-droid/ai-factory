@@ -66,7 +66,7 @@ El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git
    bash factory/scripts/install-into.sh /ruta/al/proyecto --check          # 0 = la maquinaria y las skills coinciden con la fuente
    # opcional: --engine opencode (por defecto; el único soportado hoy)
    ```
-   Si un archivo del destino ya existe y difiere, el instalador lista los conflictos y se detiene (`--force` solo sobrescribe maquinaria; nunca el Brain, `project.json`, `package.json` ni `AGENTS.md`). No instala el harness RSC (eso es `npx @ericrisco/rsc`, aparte) ni toca `/etc/opencode`.
+   Si un archivo del destino ya existe y difiere, el instalador lista los conflictos y se detiene (`--force` solo sobrescribe maquinaria; nunca el Brain, `project.json`, `package.json` ni `AGENTS.md`). RSC es opcional: si el destino ya lo tiene, `--apply` lo fija con `factory/scripts/rsc-pin.sh` (versión de `factory/rsc-pin.json`, `knowledge-sync` y `auto-update` apagados, permisos de `opencode.json` intactos); si no, el dry-run imprime el comando para instalarlo (`rsc-pin.sh --apply` pide tus respuestas y que aceptes el plan). Tampoco toca `/etc/opencode`.
 3. **Escribe el contexto:** rellena `02-DOCS/wiki/context.md` (qué es el proyecto, actores, stack, cómo se prueba, restricciones) y los marcadores `RELLENAR` de `02-DOCS/wiki/sdd/constitution.md`. El spec-writer lee `context.md` antes de cada spec; `--check` (se lanza desde el repo de la fábrica con la ruta del proyecto, no desde el proyecto) avisa mientras queden marcadores. Si el destino ya tenía `AGENTS.md`, las reglas de la fábrica quedan en `AGENTS.factory.md`: fusiónalas a mano.
 4. **Primer commit a `main`** con la instalación y el CI (`.github/workflows/ci.yml`, que el instalador crea desde `factory/templates/project-ci.yml`; el job se llama `ci`). Si usarás code owners, añade `.github/CODEOWNERS`. Se hace **antes** de proteger `main`.
 5. **Protege `main`:**
@@ -81,11 +81,13 @@ El instalador `factory/scripts/install-into.sh` monta la fábrica en un repo git
 9. **Local:** `npm run hooks:install`, `npm test`, `./factory-agent`.
 10. **Prueba de humo:** un job trivial con `/factory "<tarea pequeña>"`; comprueba que el PR sale en borrador desde `factory/<job-id>`, que el check `ci` corre y que **tú** haces el merge. No exijas `behavior-tests` fuera de `ai-factory`.
 
+11. **Base documental (opcional, recomendada para proyectos nuevos):** `/factory-init` en OpenCode. Ejecuta `factory/scripts/init-project.sh` (dry-run), te pide aprobar cada paso (`--apply install|deps|hooks|rsc|workspace`) y abre al agente `discovery`, que explora el repo, te hace las preguntas por rondas y coordina a `system-analyst`, `domain-modeler`, `architect`, `deployment-planner` y `consistency-auditor` en una worktree `factory/init-<aammdd>-<4 hex>`. Al final tú commiteas (`commit-brain.sh <job> --project`) y apruebas (`project-lint approve`); con `"project_docs": "required"` en `factory/project.json` ningún spec avanza sin esa aprobación. Los seis agentes necesitan sus líneas en `roles` de `factory/config.json` (se entregan como parche, ver `docs/propuestas/`).
+
 ### Qué instala (la tabla que el test de consistencia compara con el instalador)
 
 | Tipo | Ruta |
 |---|---|
-| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `.agents/skills` (skills de terceros, según `--engine`), `factory-agent`, `factory-maint` |
+| copia | `opencode.json`, `.opencode/agent`, `.opencode/command/factory.md`, `.opencode/command/factory-init.md`, `.opencode/plugins/factory-guard.js`, `.hooks`, `01-TOOLS`, `factory/scripts`, `factory/templates`, `factory/config.json`, `factory/rsc-pin.json`, `factory/jobs/.gitkeep`, `03-SKILLS`, `.agents/skills` (skills de terceros, según `--engine`), `factory-agent`, `factory-maint` |
 | mezcla o adapta | `package.json` (solo añade los scripts `factory:*` y `hooks:install`), `.gitignore` (bloque de la fábrica), `AGENTS.md` (sin el bloque del harness RSC; si ya existe, queda `AGENTS.factory.md`), `skills-lock.json` (añade las skills de terceros que falten; nunca pisa una entrada del destino) |
 | crea si falta | `.github/workflows/ci.yml`, `factory/project.json`, `factory/backlog.md`, `02-DOCS/wiki/index.md`, `02-DOCS/wiki/context.md`, `02-DOCS/wiki/sdd/constitution.md`, `02-DOCS/wiki/sdd/decisions.md`, `02-DOCS/wiki/sdd/methodology.md`, `02-DOCS/wiki/sdd/spec-template.md`, `02-DOCS/wiki/sdd/job-page-template.md` |
 

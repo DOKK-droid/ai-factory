@@ -6,7 +6,9 @@ import path from 'node:path';
 import { REPO, tmp, write, git, run } from './helpers.mjs';
 
 const INSTALL = path.join(REPO, 'factory/scripts/install-into.sh');
-const sh = (args, opts = {}) => run('bash', [INSTALL, ...args], { cwd: opts.cwd || REPO, env: { ...process.env, ...(opts.env || {}) } });
+// la config managed de la maquina de quien ejecuta no debe cambiar el resultado: por defecto, una copia de la plantilla en un directorio temporal
+const MANAGED_OK = tmp('af-managed-'); fs.copyFileSync(path.join(REPO, 'factory/templates/managed-opencode.json'), path.join(MANAGED_OK, 'opencode.json'));
+const sh = (args, opts = {}) => run('bash', [INSTALL, ...args], { cwd: opts.cwd || REPO, env: { ...process.env, FACTORY_MANAGED_DIR: MANAGED_OK, ...(opts.env || {}) } });
 
 /** Repo destino con un commit en main. `files` = archivos extra del proyecto. */
 function dest(files = { 'README.md': '# proyecto\n' }) {
@@ -56,6 +58,16 @@ test('--apply: copia la maquinaria y crea el Brain limpio', () => {
   assert.ok(fs.statSync(path.join(d, 'factory-agent')).mode & 0o111);
 });
 
+test('RF-I14: el destino recibe los seis agentes de /factory-init, el comando, el inicializador, el linter, las plantillas y el pin de RSC', () => {
+  const d = installed();
+  for (const f of ['.opencode/agent/discovery.md', '.opencode/agent/system-analyst.md', '.opencode/agent/domain-modeler.md', '.opencode/agent/architect.md', '.opencode/agent/deployment-planner.md', '.opencode/agent/consistency-auditor.md',
+    '.opencode/command/factory-init.md', 'factory/scripts/init-project.sh', 'factory/scripts/project-lint.mjs', 'factory/scripts/gen-index.mjs', 'factory/scripts/rsc-pin.sh', 'factory/rsc-pin.json',
+    'factory/templates/project/00-vision.md', 'factory/templates/project/discovery.md']) assert.ok(exists(d, f), `falta ${f}`);
+  assert.ok(fs.statSync(path.join(d, 'factory/scripts/init-project.sh')).mode & 0o111, 'init-project.sh ejecutable');
+  assert.ok(!exists(d, '02-DOCS/wiki/project'), 'el Brain del destino no hereda nada: la base documental la crea /factory-init');
+  assert.equal(sh([d, '--check']).status, 0);
+});
+
 test('--apply: nada de la fabrica viaja (ADR, constitucion, jobs, tests, harness RSC, parches)', () => {
   const d = installed(); const all = tree(d);
   assert.doesNotMatch(read(d, '02-DOCS/wiki/sdd/decisions.md'), /^## ADR-/m, 'decisions.md debe estar vacio de ADR');
@@ -78,7 +90,10 @@ test('--apply: el index.md del destino solo enlaza a archivos que existen y cont
   const pj = JSON.parse(read(d, 'factory/project.json'));
   assert.equal(pj.require_spec_ok, true); assert.equal(pj.spec_profile, 'full'); assert.equal(pj.max_rounds, 3); assert.deepEqual(pj.human_review_surfaces, []);
   assert.ok(pj.brain.agents['spec-writer'].includes('02-DOCS/wiki/context.md'));
-  for (const p of pj.brain.agents['spec-writer']) assert.ok(exists(d, p), `project.json cita ${p}, que no existe`);
+  // la base documental (02-DOCS/wiki/project/) la crea /factory-init: next-step.sh ignora estas paginas mientras no existan
+  for (const [a, pages] of Object.entries(pj.brain.agents)) for (const p of pages) if (!p.startsWith('02-DOCS/wiki/project/')) assert.ok(exists(d, p), `project.json cita ${p} (${a}), que no existe`);
+  assert.equal(pj.project_docs, 'required', 'un proyecto con la fabrica exige la base documental aprobada antes del primer spec');
+  assert.ok(pj.brain.agents['spec-writer'].includes('02-DOCS/wiki/project/01-requisitos.md') && pj.brain.agents.builder.includes('02-DOCS/wiki/project/04-arquitectura.md') && pj.brain.agents.approver.includes('02-DOCS/wiki/project/02-casos-de-uso.md'));
 });
 
 test('nombre del proyecto: --name y por defecto el de la carpeta; un nombre raro se rechaza', () => {
@@ -138,6 +153,14 @@ test('el comando de comprobacion que se imprime y se escribe se lanza desde la f
   assert.equal(own.status, 1); assert.match(own.stderr, /propio repo de la fabrica/); assert.match(own.stderr, /usa la de la fabrica/);
   assert.equal(sh([d, '--check']).status, 0);
 });
+test('--check avisa (sin cambiar el codigo de salida) si la config managed de OpenCode falta o difiere de la plantilla', () => {
+  const d = installed(); write(path.join(d, '02-DOCS/wiki/context.md'), '# Contexto\nTodo relleno.\n'); write(path.join(d, '02-DOCS/wiki/sdd/constitution.md'), '# C\nok\n');
+  let r = sh([d, '--check']); assert.equal(r.status, 0); assert.doesNotMatch(r.stdout, /AVISO/);
+  r = sh([d, '--check'], { env: { FACTORY_MANAGED_DIR: tmp('af-nomanaged-') } });
+  assert.equal(r.status, 0, r.stdout); assert.match(r.stdout, /AVISO: config managed de OpenCode: NO INSTALADA/); assert.match(r.stdout, /Instalala tu: sudo bash .*install-managed\.sh --apply/);
+  const other = tmp('af-othermanaged-'); write(path.join(other, 'opencode.json'), '{"permission":{"bash":{}}}\n');
+  r = sh([d, '--check'], { env: { FACTORY_MANAGED_DIR: other } }); assert.equal(r.status, 0); assert.match(r.stdout, /AVISO: config managed de OpenCode: DIFIERE/);
+});
 test('--check: 0 tras instalar (con aviso de contexto sin rellenar); 1 si falta, difiere o se coló algo de la fabrica', () => {
   const d = installed();
   let r = sh([d, '--check']); assert.equal(r.status, 0, r.stdout); assert.match(r.stdout, /AVISO.*context\.md.*RELLENAR/);
@@ -162,6 +185,17 @@ test('integracion: en el destino instalado next-step.sh crea un job y responde (
   assert.equal(ns.status, 0, ns.stdout + ns.stderr); assert.match(ns.stdout, /^DELEGATE: @intake \| .+ \| factory\/jobs\//m); assert.match(ns.stdout, /READ: 02-DOCS\/wiki\/index\.md/);
   assert.ok(!ns.stdout.includes(REPO), 'no debe apuntar a la fabrica original');
   assert.equal(git(d, 'status', '--porcelain'), '', 'jobs y worktrees quedan ignorados por git');
+});
+
+test('la documentacion manda: un proyecto recien instalado analiza (intake) pero no escribe spec hasta que la base documental este aprobada', () => {
+  const d = installed(); git(d, 'add', '-A'); git(d, 'commit', '-qm', 'instala la fabrica');
+  const env = { ...process.env, FACTORY_BASE: 'main' };
+  const id = run('bash', ['01-TOOLS/next-step.sh', '--new-id', 'tarea de prueba'], { cwd: d, env }).stdout.trim().split('\n')[0];
+  assert.equal(run('bash', ['01-TOOLS/new-job.sh', id], { cwd: d, env }).status, 0);
+  write(path.join(d, `factory/jobs/${id}/input.md`), '# Input\n\nHaz algo.\n');
+  const ns = run('bash', ['01-TOOLS/next-step.sh', id], { cwd: d, env });
+  assert.match(ns.stdout, /^STOP: HUMAN_CONFIRM_PROJECT/m, ns.stdout); assert.match(ns.stdout, /project_docs=required/); assert.match(ns.stdout, /\/factory-init/);
+  assert.doesNotMatch(ns.stdout, /DELEGATE: @spec-writer/, 'ningun agente escribe spec sin base documental');
 });
 
 // ---------------------------------------------------------------------------------------------------------
