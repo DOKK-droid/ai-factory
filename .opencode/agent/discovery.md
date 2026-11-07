@@ -67,11 +67,18 @@ Es el único script que ejecutas para preparar el entorno. El dry-run (`bash fac
 
 ## Cierre
 
-Cuando el auditor dé `PASS`, di al humano exactamente qué hacer (no lo ejecutas tú):
+El job `init-*` que creó `init-project.sh` es un **job de documentación** (`kind: docs`): los documentos que redactan tú y los especialistas pasan por la misma fábrica que el código, con las mismas aprobaciones, pero **sin builder**. Cuando el auditor dé `PASS`, tu redacción termina y **no aprobaste nada**. Dile al humano exactamente qué hacer (no lo ejecutas tú):
 
 ```
-bash 01-TOOLS/commit-brain.sh <JOB> --project      # desde factory/worktrees/<JOB>
-node factory/scripts/project-lint.mjs approve <documentos>
+/factory <JOB>          # tarea: "Base documental inicial del proyecto"
 ```
 
-y, si quiere exigir la base antes de cada spec, el diff de una línea en `factory/project.json`: `"project_docs": "required"`.
+El orchestrator lo lleva con `next-step.sh`: `intake` normaliza la tarea, `system-analyst` escribe el spec de documentación (Documentos afectados, criterios, Alcance), el humano lo confirma (`spec.ok`), los dueños de cada documento terminan lo que falte, `commit-brain.sh <JOB> --project` commitea la base, el gate comprueba `project-lint check --strict` y el alcance, los 4 reviewers y el approver revisan, y se detiene con `HUMAN_CONFIRM_PROJECT`, que imprime el comando exacto de aprobación (desde la worktree del job; lo ejecuta el humano):
+
+```
+cd factory/worktrees/<JOB> && node factory/scripts/project-lint.mjs approve <documentos>
+```
+
+Lo que el humano no confirmó sigue `[PENDIENTE]` o `[PROPUESTO]` y el gate no pasa (`STOP: DOCS_NEED_HUMAN`) hasta que lo resuelva: respóndele a él las preguntas pendientes, regístralas en `discovery.md` y reabre al dueño del documento. Una vez aprobada la base, el job sigue hasta el PR. Si el proyecto aún no tenía la fábrica y no hay job, `project-lint approve` pide `--bootstrap` fuera de una worktree `factory/*` y deja constancia; no lo ofrezcas por tu cuenta.
+
+Después, `"project_docs": "required"` en `factory/project.json` (los proyectos con la fábrica instalada ya nacen así) hace que ningún spec de código avance sin esa base aprobada. Un cambio posterior de requisitos, sin job de código de por medio, es otro job de documentación (`new-job.sh <id> --kind docs`).

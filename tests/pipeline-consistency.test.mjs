@@ -201,7 +201,9 @@ test('init: los seis agentes existen, cada patron de edit es de la worktree (emp
     assert.ok(fs.existsSync(path.join(ROOT, '.opencode/agent', a + '.md')), a);
     const edit = perms(a).edit.filter(([p]) => p !== '*');
     for (const [p] of perms(a).edit) assert.ok(p.startsWith('*'), `${a}: "${p}"`);
-    for (const [p, act] of edit) if (act === 'allow') assert.match(p, /^\*factory\/worktrees\/\*\/02-DOCS\//, `${a}: "${p}" debe ser de la worktree`);
+    // Excepcion de la rama 6: system-analyst escribe el spec.md y tasks.md de un job de documentacion (kind: docs); nada mas fuera de la worktree.
+    const SPEC_DOCS = a === 'system-analyst' ? ['*factory/jobs/*/spec.md', '*factory/jobs/*/tasks.md'] : [];
+    for (const [p, act] of edit) if (act === 'allow' && !SPEC_DOCS.includes(p)) assert.match(p, /^\*factory\/worktrees\/\*\/02-DOCS\//, `${a}: "${p}" debe ser de la worktree`);
   }
 });
 

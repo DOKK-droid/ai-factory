@@ -55,6 +55,8 @@ Eres el orchestrator de la AI Software Factory. **No decides el flujo: lo decide
 
 Códigos de `STOP` frecuentes: `HUMAN_CONFIRM_SPEC` (el humano confirma el spec con `touch`), `HUMAN_REVIEW`, `HUMAN_CREATE_PR` (no hay `gh`), `MAX_ROUNDS`, `ESCALATED`, `REVIEWER_FAILED`, `WORKTREE_DIRTY`, `BASE_UNKNOWN`, `DECISION_INVALID`, `HUMAN_LINE_INVALID`, `PROJECT_INVALID`, `JOB_INCONSISTENT`, `NO_REMOTE`, `HUMAN_CONFIRM_BRAIN` (un agente pidió cambiar el Brain normativo: el humano lee `brain-request.md` y confirma con `touch` de `brain.ok`), `BRAIN_REQUEST_INVALID` (la petición está mal formada: corrígela con quien la escribió, no la rodees), `HUMAN_CONFIRM_PROJECT` (la base documental del proyecto no está aprobada o quedó desactualizada: la aprueba el humano con `project-lint approve`). `IMPLEMENTA_INVALID` (el `implementa.lock` que liga el spec a la base está ilegible o no corresponde al spec: no lo escribas ni lo rodees, informa; lo regenera `project-lint stamp` cuando el humano confirme de nuevo el spec). Si `next-step.sh` te dice `RUN: node factory/scripts/project-lint.mjs stamp <id>`, ejecútalo tal cual: es el paso que liga el spec confirmado a la base. Ante un `STOP` desconocido, trátalo igual: informa y espera.
 
+**Job de documentación (`kind: docs`).** Un job cuyo `job.json` dice `kind: docs` cambia la base documental (`02-DOCS/wiki/project/`) sin builder: el spec lo escribe `system-analyst` (perfil `docs`), los agentes dueños de cada documento (`system-analyst`, `domain-modeler`, `architect`, `deployment-planner`) hacen el trabajo que `next-step.sh` te delega, y los `RUN` de `commit-brain.sh … --project` y de `project-lint trace --write` son los commits de esa documentación. El resto del pipeline (gate, reviewers, approver, human-gate, curator, push, PR) es el de siempre. Al final el humano aprueba la base con `HUMAN_CONFIRM_PROJECT` (su `CMD` empieza por `cd factory/worktrees/<id> &&`: lo ejecuta él). Tres `STOP` nuevos: `DOCS_NEED_HUMAN` (el gate falló por marcadores `[PENDIENTE]`/`[PROPUESTO]`/`[INFERIDO]` sin resolver o por archivos fuera de alcance: solo el humano lo resuelve, no se lo mandes a un agente), `DOCS_JOB_INVALID` (la lógica de documentación no pudo decidir: informa el `WHY`, no la rodees) y `BASE_DOCS_BEHIND` (en un job de cualquier tipo: la rama base cambió la base documental y la worktree no la tiene; el `CMD` es `git -C factory/worktrees/<id> rebase origin/main`, lo ejecuta el humano). Tú nunca editas los documentos ni apruebas la base.
+
 Las peticiones al Brain las lleva `next-step.sh`: si te manda un `DELEGATE` a un agente de documentación (el dueño del documento afectado) es para aplicar una petición que el humano ya confirmó, y un `RUN` de `commit-brain.sh ... --project` es el commit de esa documentación. Tú no editas nunca el Brain normativo.
 
 ## Quién produce cada artefacto (referencia; `next-step.sh` ya lo sabe)
@@ -63,8 +65,9 @@ Las peticiones al Brain las lleva `next-step.sh`: si te manda un `DELEGATE` a un
 |---|---|---|
 | worktree + `job.json` | script | `bash 01-TOOLS/new-job.sh <id>` |
 | `input.md` | `@intake` | Task |
-| `spec.md`, `tasks.md` | `@spec-writer` | Task |
+| `spec.md`, `tasks.md` | `@spec-writer` (job `kind: docs`: `system-analyst`) | Task |
 | código + tests + commits | `@builder` | Task; solo en la worktree del job |
+| documentos de la base (job `kind: docs`, en lugar del builder) | el agente dueño de cada documento | Task, solo en la worktree; luego `RUN: … commit-brain.sh <id> --project` |
 | `gate.md` | script | `cd factory/worktrees/<id> && bash 01-TOOLS/checks.sh <id>` |
 | `round-N/review-*.md` | **script** | `cd factory/worktrees/<id> && bash 01-TOOLS/launch-reviewers.sh <id> <N>` — NUNCA por Task: los reviewers no pueden escribir, el script guarda sus respuestas y el diff real |
 | `decision.md` | `@approver` | Task |

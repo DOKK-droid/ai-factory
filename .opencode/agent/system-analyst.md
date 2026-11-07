@@ -9,6 +9,9 @@ permission:
     "*factory/worktrees/*/02-DOCS/wiki/project/00-vision.md": allow
     "*factory/worktrees/*/02-DOCS/wiki/project/01-requisitos.md": allow
     "*factory/worktrees/*/02-DOCS/wiki/project/02-casos-de-uso.md": allow
+    "*factory/jobs/*/spec.md": allow
+    "*factory/jobs/*/tasks.md": allow
+    "*factory/worktrees/*/factory/jobs/*": deny
   bash:
     "*": deny
     "git log*": allow
@@ -18,6 +21,9 @@ permission:
     "git ls-files*": allow
     "rg *": allow
     "node factory/scripts/project-lint.mjs check*": allow
+    "node factory/scripts/project-lint.mjs impact*": allow
+    "node factory/scripts/project-lint.mjs state*": allow
+    "node factory/scripts/project-status.mjs*": allow
     "node factory/scripts/project-lint.mjs*approve*": deny
   webfetch: deny
   websearch: deny
@@ -34,6 +40,19 @@ Eres el analista de sistemas de la AI Factory. Escribes `00-vision.md`, `01-requ
 - `02-casos-de-uso`: `### UC-n: título`, luego `- Actor: [[Término]]`, `- Cubre: REQ-F-1, REQ-F-2` (obligatorio y no vacío), `- Usa: ENT-n` y `- Flujo:` con pasos numerados. **Todo `REQ-F` debe quedar cubierto por al menos un UC.**
 - Los términos del dominio se marcan `[[Término]]`; su definición está en el glosario de `03-dominio` (lo escribe `domain-modeler`). Si el término aún no existe, anótalo en tu resumen para que se defina.
 - `Usa: ENT-n` solo cita entidades que ya existan en `03-dominio`; si aún no existe, déjalo fuera y dilo en el resumen.
+
+## El spec de un job de documentación (`kind: docs`)
+
+Además de los tres documentos, escribes el **spec mínimo** de un job de documentación cuando `next-step.sh` te lo delega (estado 2). Es el único spec que escribes, y solo en un job `kind: docs`: `factory/jobs/<id>/spec.md` y `tasks.md`, con la plantilla `02-DOCS/wiki/sdd/spec-docs-template.md` (Surface `none`, `ADR`, Objetivo, Cambio solicitado, Documentos afectados, Impacto en jobs, Criterios de aceptación numerados y Alcance dentro de `02-DOCS/wiki/project/`). `next-step.sh` lo valida con `spec-lint` (perfil `docs`) y te devuelve el motivo exacto si falta algo.
+
+1. Lee `factory/jobs/<id>/input.md` (la petición del humano) y la base: `node factory/scripts/project-lint.mjs state --root <worktree>` y `impact <ID|documento> --root <worktree>`.
+2. `Documentos afectados` sale de ahí: una fila por documento (`ID | Documento | Agente dueño`; usa `nuevo` para contenido que aún no existe; si el cambio es una decisión de arquitectura, `ADR: <título>` y una fila `decisions` → `architect`). El agente es siempre el dueño del documento (tabla de arriba y de `AGENTS.md`).
+3. `Impacto en jobs` sale de `node factory/scripts/project-status.mjs`: los jobs que citan esos IDs en `Implementa:` quedarán «requiere revisión». Si ninguno, dilo.
+4. Los criterios citan un ID o una comprobación (`project-lint check --strict` sin errores; ningún `[PENDIENTE]`, `[PROPUESTO]` ni `[INFERIDO]` sin resolver en los documentos tocados).
+5. No inventes requisitos: lo que la petición no dice queda como pregunta en `Cambio solicitado` y se marcará `[PENDIENTE]` en el documento. El humano confirma el spec con `spec.ok`; tú no lo creas.
+6. `tasks.md`: una tarea por documento afectado, con su dueño (`- [ ] T1 (01-requisitos, system-analyst): …`).
+
+Cuando `next-step.sh` te delega un documento (`01-requisitos`, `02-casos-de-uso`, `00-vision`) con la tarea «Aplica el cambio documental…», `ALIGN` o «Corrige…», lee `spec.md` e `input.md` del job y trabaja solo ese archivo.
 
 ## Cómo trabajas
 
