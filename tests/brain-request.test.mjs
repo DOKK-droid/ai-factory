@@ -223,7 +223,8 @@ test('el parche existe, es un diff válido de los 4 archivos protegidos y se apl
   const p = path.join(REPO, PATCH); assert.ok(fs.existsSync(p), PATCH);
   const files = [...fs.readFileSync(p, 'utf8').matchAll(/^diff --git a\/(\S+)/gm)].map((m) => m[1]).sort();
   assert.deepEqual(files, ['01-TOOLS/lib.sh', '01-TOOLS/next-step.sh', 'factory/scripts/command-guard.mjs', 'factory/scripts/scope-check.mjs']);
-  const ck = run('git', ['apply', nsPatched ? '--check --reverse' : '--check', p].join(' ').split(' '), { cwd: REPO }); assert.equal(ck.status, 0, ck.stderr);
+  // Ya aplicado, el parche no se puede revertir limpio en cuanto otro parche posterior toca las mismas lineas: solo se comprueba antes de aplicarlo.
+  if (!nsPatched) { const ck = run('git', ['apply', '--check', p], { cwd: REPO }); assert.equal(ck.status, 0, ck.stderr); }
 });
 
 test('guard: brain.ok y project.ok los crea el humano; project-lint approve no lo ejecuta un agente', { skip: miss(guardPatched) }, () => {
@@ -255,11 +256,14 @@ test('scope-check.mjs y lib.sh declaran la misma lista de base documental', { sk
 
 // ---- next-step.sh
 const full = (extra = {}) => ({ require_spec_ok: true, spec_profile: 'full', ...extra });
-// Con la base aprobada (seed) el spec debe citarla en Implementa: (RF-I15), como exige spec-lint.
+// Con la base aprobada (seed) el spec debe citarla en Implementa: (RF-I15), como exige spec-lint. Cita REQ-F-1 y UC-1; los tests cambian REQ-F-2.
 const nsJob = (stage, o = {}) => {
   const f = fx({ tools: true, project: full(o.project || {}), ...(o.fx || {}) });
-  if (o.seed) { seedProject(f, o.seed === true ? {} : o.seed); const spec = f.spec; f.spec = (x) => spec({ implementa: ['REQ-F-1', 'REQ-F-2'], ...x }); }
-  f.upTo(stage); return f;
+  if (o.seed) { seedProject(f, o.seed === true ? {} : o.seed); const spec = f.spec; f.spec = (x) => spec({ implementa: ['REQ-F-1', 'UC-1'], ...x }); }
+  f.upTo(stage);
+  // Con el spec confirmado y citando la base, el orchestrator ejecuta `project-lint stamp` (bloque 3b de next-step, si esta aplicado).
+  if (o.seed && fs.existsSync(path.join(f.job, 'spec.ok'))) assert.equal(run('node', [LINT, 'stamp', f.id, '--jobs-dir', path.join(f.repo, 'factory/jobs')], { cwd: f.repo, env: f.env() }).status, 0);
+  return f;
 };
 test('next-step 1b: petición inválida => STOP BRAIN_REQUEST_INVALID, antes de spec.ok y del builder', { skip: miss(nsPatched) }, () => {
   const f = nsJob('confirmed'); f.request = (t) => put(path.join(f.job, 'brain-request.md'), t);
