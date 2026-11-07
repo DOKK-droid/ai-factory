@@ -17,7 +17,8 @@ export const put = (file, text) => { write(file, text); stamp(file); };
 export const SPEC = ({ surface = 'none', alcance = '- src/**', criteria = '1. Hace X\n2. Hace Y', title = '# Spec de prueba' } = {}) =>
   `${title}\nSurface: ${surface}\n\n## Criterios\n${criteria}\n\nAlcance:\n${alcance}\n`;
 
-export const SPEC_FULL = ({ surface = 'none', adr = 'none', title = '# Spec de prueba', extra = '' } = {}) => `${title}
+// implementa: lista (una entrada por RF) con lo que cada RF implementa de la base documental, p. ej. ['REQ-F-1', 'REQ-F-2, UC-2']
+export const SPEC_FULL = ({ surface = 'none', adr = 'none', title = '# Spec de prueba', extra = '', implementa = null } = {}) => `${title}
 Surface: ${surface}
 ADR: ${adr}
 
@@ -29,8 +30,8 @@ Acotar numeros.
 - Suite de tests: verifica el comportamiento
 
 ## Requisitos funcionales
-- RF-1: acota por debajo de min
-- RF-2: acota por encima de max
+- RF-1: acota por debajo de min${implementa?.[0] ? `. Implementa: ${implementa[0]}` : ''}
+- RF-2: acota por encima de max${implementa?.[1] ? `. Implementa: ${implementa[1]}` : ''}
 
 ## Diseño
 - src/feature.js exporta la funcion pura

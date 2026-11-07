@@ -6,13 +6,17 @@
  *   standard  Surface, criterios numerados, Alcance con rutas, tasks.md.                         (por defecto)
  *   full      + ADR, Actores, Requisitos funcionales (RF-n), Diseño, y trazabilidad:
  *             cada criterio cita [RF-n] existentes, cada RF lo cubre >=1 criterio y aparece en tasks.md.
+ *             Con la base documental exigida (project_docs=required, o ya hay documentos aprobados) cada RF termina con
+ *             `Implementa: REQ-F-1, UC-2` y esos IDs deben existir en 02-DOCS/wiki/project/ (RF-I15).
  *
  * Las secciones se escriben como "## Actores" o como "Actores:" (ambas valen).
  *
  * Uso:
- *   node spec-lint.mjs check   <spec.md> <tasks.md> [standard|full]   -> un problema por linea; sale 0 si no hay
+ *   node spec-lint.mjs check   <spec.md> <tasks.md> [standard|full] [--root R]   -> un problema por linea; sale 0 si no hay
  *   node spec-lint.mjs adr     <spec.md>                              -> "none" o el titulo del ADR declarado
  *   node spec-lint.mjs summary <spec.md>                              -> resumen para el humano (una linea por dato)
+ *   node spec-lint.mjs page    <spec.md> <pagina-del-job.md>          -> problemas de la linea Implementa: de la pagina; sale 0 si no hay
+ * La base documental que `check` usa para Implementa: es la de la worktree del job (la deduce de la ruta del spec) o la de --root.
  */
 import fs from 'node:fs';
 
@@ -48,9 +52,40 @@ export const adr = (t) => {
   if (v === undefined) return null;               // sin linea ADR
   return v === '' || /^(none|ninguno|ninguna|n\/a|no)$/i.test(v) ? 'none' : v;
 };
+export const ID_IMPLEMENTA = /^(?:REQ-F-\d+|REQ-NF-\d+|UC-\d+|ENT-\d+)$/;
+const IMPLEMENTA_LINE = /\bImplementa:\*{0,2}\s*(.*)$/i;
+const idList = (raw) => String(raw).split(/[\s,;]+/).map((x) => x.replace(/[.)\]*]+$/, '').replace(/^[(\[*]+/, '')).filter(Boolean);
+/** IDs que un spec dice implementar: union ordenada y sin repetidos de las lineas `Implementa:` de sus RF (los mal formados no cuentan). */
+export function implementaIds(spec) {
+  const ids = new Set();
+  for (const l of bullets(section(spec, 'rf'))) { const m = l.match(IMPLEMENTA_LINE); if (m) idList(m[1]).map((x) => x.toUpperCase()).filter((x) => ID_IMPLEMENTA.test(x)).forEach((x) => ids.add(x)); }
+  return [...ids].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+}
+const PAGE_LINE = /^\s*(?:[-*]\s+)?\**Implementa:\**\s*(.*)$/i;
+/** IDs de la linea `Implementa:` de la pagina de un job (null si no la tiene). */
+export function pageIds(page) {
+  const line = String(page).split(/\r?\n/).map((l) => l.match(PAGE_LINE)).find(Boolean);
+  return line ? [...new Set(idList(line[1]).map((x) => x.toUpperCase()))] : null;
+}
+/** Problemas de la linea `Implementa:` de la pagina del job frente al spec (vacio = valida o el spec no cita IDs). */
+export function pageProblems(spec, page) {
+  const want = implementaIds(spec);
+  if (!want.length) return [];
+  const got = pageIds(page);
+  if (!got) return [`la página del job está sin la línea 'Implementa: ${want.join(', ')}' (la unión de las del spec)`];
+  const falta = want.filter((x) => !got.includes(x)), sobra = got.filter((x) => !want.includes(x));
+  const p = [];
+  if (falta.length) p.push(`a la línea 'Implementa:' de la página del job le faltan: ${falta.join(', ')}`);
+  for (const x of sobra) p.push(`la línea 'Implementa:' de la página del job cita ${x}, que el spec no cita`);
+  return p;
+}
 const criteria = (t) => String(t).split(/\r?\n/).filter((l) => /^\s*\d+[.)]\s+\S/.test(l)).map((l) => l.replace(/^\s*\d+[.)]\s+/, ''));
 
-export function lint(spec, tasks, profile = 'standard') {
+/**
+ * `project` = { required, defined }: required => cada RF debe citar lo que implementa; defined = Set de IDs de la base (null si no se conoce).
+ * Con la base exigida un conjunto vacio significa que ningun ID existe; sin exigirla solo se comprueba la existencia si hay base.
+ */
+export function lint(spec, tasks, profile = 'standard', project = null) {
   const p = [];
   const crit = criteria(spec);
   if (!String(spec).trim()) return ['falta spec.md o esta vacio'];
@@ -68,6 +103,18 @@ export function lint(spec, tasks, profile = 'standard') {
   else if (rfs.some((x) => !x)) p.push("cada requisito funcional debe empezar por su id: '- RF-1: ...'");
   const ids = rfs.filter(Boolean);
   if (new Set(ids).size !== ids.length) p.push('hay ids RF-n repetidos');
+  rfLines.forEach((l, i) => {
+    if (!rfs[i]) return;
+    const m = l.match(IMPLEMENTA_LINE);
+    if (!m) { if (project?.required) p.push(`${rfs[i]} sin 'Implementa: REQ-F-n, UC-n' (el proyecto exige que cada requisito del spec cite lo que implementa de la base documental)`); return; }
+    const cited = idList(m[1]);
+    if (!cited.length) { p.push(`${rfs[i]}: 'Implementa:' está vacío`); return; }
+    for (const raw of cited) {
+      const id = raw.toUpperCase();
+      if (!ID_IMPLEMENTA.test(id)) p.push(`${rfs[i]}: '${raw}' no es un ID de la base (REQ-F-n, REQ-NF-n, UC-n o ENT-n)`);
+      else if (project?.defined && (project.required || project.defined.size) && !project.defined.has(id)) p.push(`${rfs[i]} cita ${id} en Implementa, que no está definido en la base documental`);
+    }
+  });
   if (!(section(spec, 'diseno') || []).length) p.push("sin seccion 'Diseño' (componentes, interfaces y decisiones; al menos una linea)");
   const cited = new Set();
   crit.forEach((c, i) => {
@@ -86,16 +133,29 @@ export function summary(spec) {
   const out = [`Surface: ${surface(spec) || '?'} | criterios: ${criteria(spec).length}`];
   const a = bullets(section(spec, 'actores')); if (a.length) out.push(`Actores (${a.length}): ${a.map((x) => x.split(':')[0]).join(', ')}`);
   const r = bullets(section(spec, 'rf')); if (r.length) out.push(`Requisitos funcionales: ${r.length}`);
+  const im = implementaIds(spec); if (im.length) out.push(`Implementa (${im.length}): ${im.join(', ')}`);
   const al = bullets(section(spec, 'alcance')); out.push(`Alcance: ${al.slice(0, 8).join(', ') || '(vacio)'}`);
   const d = adr(spec); if (d && d !== 'none') out.push(`ADR a registrar: ${d}`);
   return out;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const [mode, specPath, tasksPath, profile] = process.argv.slice(2);
+// Sin top-level await: project-lint importa este modulo, y un await aqui dejaria el ciclo sin resolver.
+async function cli(argv) {
+  const pos = [];
+  const usage = () => { console.error('uso: spec-lint.mjs check <spec> <tasks> [standard|full] [--root R] | adr <spec> | summary <spec> | page <spec> <pagina>'); return 64; };
+  let root = null;
+  for (let i = 0; i < argv.length; i++) { if (argv[i] === '--root' && argv[i + 1]) root = argv[++i]; else if (argv[i].startsWith('--')) return usage(); else pos.push(argv[i]); }
+  const [mode, specPath, tasksPath, profile] = pos;
   const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
-  if (mode === 'check') { const p = lint(read(specPath), read(tasksPath), profile || 'standard'); p.forEach((x) => console.log(x)); process.exit(p.length ? 1 : 0); }
-  else if (mode === 'adr') console.log(adr(read(specPath)) ?? 'none');
-  else if (mode === 'summary') summary(read(specPath)).forEach((x) => console.log(x));
-  else { console.error('uso: spec-lint.mjs check <spec> <tasks> [standard|full] | adr <spec> | summary <spec>'); process.exit(64); }
+  const out = (p) => { p.forEach((x) => console.log(x)); return p.length ? 1 : 0; };
+  if (mode === 'check') {
+    let project = null;
+    if ((profile || 'standard') === 'full') { try { project = (await import('./project-lint.mjs')).projectContext({ specPath, root }); } catch { project = null; } }
+    return out(lint(read(specPath), read(tasksPath), profile || 'standard', project));
+  }
+  if (mode === 'adr') { console.log(adr(read(specPath)) ?? 'none'); return 0; }
+  if (mode === 'summary') { summary(read(specPath)).forEach((x) => console.log(x)); return 0; }
+  if (mode === 'page') return out(pageProblems(read(specPath), read(tasksPath)));
+  return usage();
 }
+if (import.meta.url === `file://${process.argv[1]}`) cli(process.argv.slice(2)).then((code) => process.exit(code));
