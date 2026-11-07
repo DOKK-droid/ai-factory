@@ -286,5 +286,12 @@ test('init: los prompts nombran solo scripts y agentes que existen; /factory-ini
   assert.match(cmd, /^agent: discovery$/m); assert.match(cmd, /init-project\.sh/); assert.match(cmd, /HANDOFF=discovery/); assert.match(cmd, /MANUAL:/); assert.match(cmd, /\$ARGUMENTS/);
   const disc = fs.readFileSync(path.join(ROOT, '.opencode/agent/discovery.md'), 'utf8');
   for (const a of INIT_AGENTS.filter((x) => x !== 'discovery')) assert.match(disc, new RegExp(a));
-  assert.match(disc, /\[INVESTIGADO/); assert.match(disc, /no confiable/); assert.match(disc, /máximo 5/);
+  assert.match(disc, /\[INVESTIGADO/); assert.match(disc, /no confiable/); assert.match(disc, /hasta 10/); assert.doesNotMatch(disc, /máximo 5/);
+});
+
+test('D5/D9: la propia fabrica exige la base documental (project_docs=required) y fast_path sigue apagado', () => {
+  const pj = JSON.parse(fs.readFileSync(path.join(ROOT, 'factory/project.json'), 'utf8'));
+  assert.equal(pj.project_docs, 'required');
+  assert.equal(CONFIG.fast_path.enabled, false, 'fast_path lo habilita el humano explicitamente');
+  assert.equal(rolesApplied, 6, 'config.json lleva los roles de los seis agentes (los gobierna apply-models)');
 });
