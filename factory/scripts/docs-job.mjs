@@ -198,7 +198,7 @@ export function gateRun({ jobDir, mergeBase, root = process.cwd() }) {
   // 3. project-lint check --strict
   const a = analyze({ root, strict: true });
   const errs = a.problems.filter((p) => p.sev === 'E');
-  const touched = DOCS.filter((d) => changes.some((c) => c.path === `${PROJECT_DIR}/${d}.md`));
+  const touched = DOCS.filter((d) => !a.docs[d].missing && changes.some((c) => c.path === `${PROJECT_DIR}/${d}.md`));   // un documento borrado ya lo reporta PL005
   const tpl = touched.filter((d) => a.states[d] === 'PLANTILLA');
   if (errs.length) { errs.forEach((p) => out.push(fmt(p))); fail('project-lint'); }
   else out.push('-> project-lint check --strict: OK');

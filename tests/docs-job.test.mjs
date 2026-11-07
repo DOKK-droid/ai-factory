@@ -190,3 +190,11 @@ test('el spec de la fixture es el que valida spec-lint docs (la fixture no se de
   assert.equal(r.status, 0, r.stdout);
   assert.match(docsSpecText(), /Cambio documental/);
 });
+
+test('gate: un documento de la base que falta suspende (check --strict exige los siete) y un project.ok roto se reporta como sintaxis', () => {
+  const f = docsJob(); f.agentEdit('01-requisitos', ...REQ2); f.commitProject(); f.marcarDesactualizado('02-casos-de-uso'); f.commitProject();
+  git(f.wt, 'rm', '-q', `${PD}/06-despliegue.md`); git(f.wt, 'commit', '-qm', 'quita un documento');
+  let g = gate(f); assert.equal(g.code, 1); assert.match(g.out, /^PL005 E 06-despliegue\.md/m);
+  const h = docsJob(); h.agentEdit('01-requisitos', ...REQ2); h.commitProject(); h.marcarDesactualizado('02-casos-de-uso'); write(path.join(h.wt, PD, 'project.ok'), '{ no es json'); h.commitProject();
+  g = gate(h); assert.equal(g.code, 1); assert.match(g.out, /SINTAXIS 02-DOCS\/wiki\/project\/project\.ok: JSON invalido/);
+});

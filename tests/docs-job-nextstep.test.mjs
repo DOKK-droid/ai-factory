@@ -291,3 +291,18 @@ test('orchestrator.md explica los STOP del job docs y quien produce cada artefac
   for (const c of ['BASE_DOCS_BEHIND', 'DOCS_NEED_HUMAN', 'DOCS_JOB_INVALID']) assert.ok(orch.includes(c), c);
   assert.match(orch, /kind: docs/); assert.match(orch, /system-analyst/); assert.match(orch, /rebase/);
 });
+
+test('estado 11: el curator de un job docs deja su pagina en el Brain y cita el commit del gate (se le devuelve hasta que lo haga)', { skip: SK, timeout: 300000 }, () => {
+  const f = docsJob({ stage: 'job' }); f.gh = fakeGh().bin; let n = 0;
+  const bad = [
+    () => put(path.join(f.job, 'trace.md'), '# trace\nBrain: sin cambios\n'),
+    () => { write(path.join(f.wt, '02-DOCS/wiki/jobs/job-1.md'), '# job job-1\n\nsin evidencia\n'); put(path.join(f.job, 'trace.md'), '# trace\nBrain: 02-DOCS/wiki/jobs/job-1.md\n'); },
+  ];
+  const { actions, final } = drive(f, { agents: { 'system-analyst': analyst(f), 'memory-curator': () => { if (n < bad.length) bad[n++](); else { n++; curator(f)(); } } },
+    humans: { HUMAN_CONFIRM_SPEC: () => f.confirm(), HUMAN_CONFIRM_PROJECT: (r) => { assert.equal(runCmd(f, r.cmd[0]).status, 0); } } });
+  assert.equal(final.first, 'DONE', actions.map((a) => a.first).join('\n'));
+  const cur = actions.filter((a) => a.kind === 'DELEGATE' && /^@memory-curator/.test(a.value));
+  assert.equal(cur.length, 3); assert.match(cur[0].why.join(' '), /falta trace\.md|escribir 02-DOCS\/wiki\/jobs\/job-1\.md/); assert.match(cur[0].value, /NO edites 02-DOCS\/wiki\/project/);
+  assert.match(cur[1].why.join(' '), /job de documentacion: la linea Brain: debe incluir 02-DOCS\/wiki\/jobs\/job-1\.md/);
+  assert.match(cur[2].why.join(' '), /no cita el commit del gate/);
+});
