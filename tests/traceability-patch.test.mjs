@@ -83,6 +83,7 @@ test('next-step 3b: sin spec.ok exigido no hay confirmación a la que ligar; sin
   const c = fx({ project: { spec_profile: 'full' } }).upTo('confirmed'); const r = c.ns(); delegate(r, 'builder'); assert.equal(r.state, '4');
 });
 
+const delegate_ok = (r) => { assert.equal(r.kind, 'RUN'); assert.match(r.value, /commit-brain\.sh job-1$/); };   // la página buena sigue su camino
 const upToHuman = (o = {}) => { const f = job(o); stamped(f); f.commit(); f.gate(); f.reviews(1); f.decision(); f.human(); return f; };
 
 // ---------------------------------------------------------------- un spec realineado invalida gate, reviews y decisión
@@ -119,6 +120,14 @@ test('next-step 11: la página del job debe llevar Implementa con la unión exac
   const page = path.join(f.wt, '02-DOCS/wiki/jobs/job-1.md'); fs.writeFileSync(page, fs.readFileSync(page, 'utf8').replace('# job job-1\n\n', '# job job-1\n\nImplementa: REQ-F-1\n\n'));
   r = f.ns(); delegate(r, 'memory-curator'); assert.match(r.why.join(), /le faltan: REQ-F-2, UC-2/);
   f.curate(); r = f.ns(); assert.equal(r.kind, 'RUN'); assert.match(r.value, /commit-brain\.sh job-1$/);
+});
+test('next-step 11 falla cerrado: si spec-lint page se cae sin decir nada, la página no se da por buena', { skip: miss(nsPage) }, () => {
+  const f = upToHuman(); f.curate(); delegate_ok(f.ns());
+  const copy = tmp('af-ns-copy-'); fs.cpSync(path.join(REPO, '01-TOOLS'), path.join(copy, '01-TOOLS'), { recursive: true }); fs.cpSync(path.join(REPO, 'factory/scripts'), path.join(copy, 'factory/scripts'), { recursive: true });
+  const lint = path.join(copy, 'factory/scripts/spec-lint.mjs'); const t = fs.readFileSync(lint, 'utf8'); const from = "if (mode === 'page') return";
+  assert.ok(t.includes(from)); fs.writeFileSync(lint, t.replace(from, "if (mode === 'page') process.exit(3); if (false) return"));   // la copia se cae en 'page' sin imprimir nada
+  const r = parseNs(run('bash', [path.join(copy, '01-TOOLS/next-step.sh'), f.id], { cwd: f.repo, env: f.env() }));
+  delegate(r, 'memory-curator'); assert.match(r.why.join(), /jobs\/job-1\.md: spec-lint\.mjs page fall/);
 });
 test('next-step 11: un spec sin IDs de la base no le exige nada a la página', { skip: miss(nsPage) }, () => {
   const f = fx({ project: { spec_profile: 'full' } }); f.upTo('humanized'); f.curate({ implementaLine: false }); const r = f.ns(); assert.equal(r.kind, 'RUN'); assert.match(r.value, /commit-brain\.sh/);

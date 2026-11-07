@@ -25,7 +25,7 @@ test('stamp: sin ruta explícita lee la base de la worktree del job (no la del c
   f.align('stamp'); assert.equal(f.readLock().ids['REQ-F-1'], hashOf(f.wt, 'REQ-F-1')); assert.notEqual(f.readLock().ids['REQ-F-1'], hashOf(f.repo, 'REQ-F-1'));
 });
 test('stamp se niega sin una confirmación vigente: sin spec.ok, con spec.md más nuevo, o ya ligado', () => {
-  const sin = job({ confirm: false }); let r = sin.align('stamp'); assert.equal(r.code, 1); assert.match(r.raw + r.stderr, /spec\.ok/); assert.ok(!fs.existsSync(sin.lock));
+  const sin = job({ confirm: false }); let r = sin.align('stamp'); assert.equal(r.code, 1); assert.match(r.raw + r.stderr, /no hay spec\.ok/); assert.ok(!fs.existsSync(sin.lock));
   const viejo = job(); touch(path.join(viejo.job, 'spec.md')); r = viejo.align('stamp'); assert.equal(r.code, 1); assert.match(r.raw + r.stderr, /spec\.md es más nuevo/); assert.ok(!fs.existsSync(viejo.lock));
   const f = job(); assert.equal(f.align('stamp').code, 0); const antes = fs.readFileSync(f.lock, 'utf8');
   edit(REQS(f), 'crear un [[Pedido]]', 'crear y cancelar un [[Pedido]]'); r = f.align('stamp');                  // un agente intenta "ponerse al día" sin que el humano reconfirme
@@ -67,7 +67,7 @@ test('realign falla cerrado: lock ilegible, de otro formato o que no corresponde
     fs.writeFileSync(f.lock, txt); put(f.lock, txt); const r = f.align('realign'); assert.equal(r.first, 'INVALID', txt); assert.match(r.get('WHY').join(' '), re, txt);
   }
   fs.writeFileSync(f.lock, bueno); put(f.lock, bueno); assert.equal(f.align('realign').first, 'OK');
-  fs.rmSync(path.join(f.job, 'spec.ok')); const r = f.align('realign'); assert.equal(r.first, 'INVALID'); assert.match(r.get('WHY').join(' '), /spec\.ok/);
+  fs.rmSync(path.join(f.job, 'spec.ok')); const r = f.align('realign'); assert.equal(r.first, 'INVALID'); assert.match(r.get('WHY').join(' '), /spec\.ok no existe/);
   const g = job(); g.align('stamp'); touch(path.join(g.job, 'spec.md')); assert.equal(g.align('realign').first, 'INVALID');
 });
 test('realign sin spec.md => NONE (lo reclama el estado 2 de next-step); uso incorrecto => 64', () => {

@@ -72,6 +72,9 @@ test('spec-lint (CLI) detecta solo si la base se exige: project_docs=required, o
   r = cli(off, SPEC_FULL()); assert.equal(r.status, 1); assert.match(r.stdout, /RF-1 sin 'Implementa:/);
   const offVacio = job({ project: { ...POLICY, project_docs: 'off' }, approve: false, confirm: false }); put(path.join(offVacio.job, 'tasks.md'), TASKS_FULL);   // off + base sin aprobar
   assert.equal(cli(offVacio, SPEC_FULL()).status, 0);
+  const reqSinAprobar = job({ approve: false, confirm: false }); put(path.join(reqSinAprobar.job, 'tasks.md'), TASKS_FULL);   // required + base sin aprobar: la politica manda sola
+  r = cli(reqSinAprobar, SPEC_FULL()); assert.equal(r.status, 1); assert.match(r.stdout, /RF-1 sin 'Implementa:/);
+  assert.equal(cli(reqSinAprobar, SPEC_FULL({ implementa: IMPL })).status, 0);
   const sin = fx({ tools: true, project: { spec_profile: 'full' } }).upTo('input'); put(path.join(sin.job, 'tasks.md'), TASKS_FULL);      // sin base alguna
   assert.equal(cli(sin, SPEC_FULL()).status, 0);
 });
