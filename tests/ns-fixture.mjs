@@ -59,7 +59,7 @@ export function parse(r) {
   };
 }
 
-export function fx({ project = null, config = null, remote = true, id = 'job-1', tools = false } = {}) {
+export function fx({ project = null, config = null, remote = true, id = 'job-1', tools = false, kind = null } = {}) {
   const origin = tmp('af-origin-'); git(origin, 'init', '-q', '--bare', '-b', 'main');
   const repo = tmp('af-ns-');
   git(repo, 'init', '-q', '-b', 'main'); git(repo, 'config', 'user.email', 't@t.t'); git(repo, 'config', 'user.name', 't'); git(repo, 'config', 'commit.gpgsign', 'false');
@@ -85,7 +85,7 @@ export function fx({ project = null, config = null, remote = true, id = 'job-1',
   };
   f.env = env;
   f.ns = (extra = {}, cwd = repo, args = [id]) => parse(run('bash', [NEXT, ...args], { cwd, env: env(extra), timeout: 60000 }));
-  f.newJob = () => { const r = run('bash', [NEWJOB, id], { cwd: repo, env: env() }); if (r.status !== 0) throw new Error('new-job: ' + r.stdout + r.stderr); };
+  f.newJob = () => { const r = run('bash', [NEWJOB, id, ...(kind ? ['--kind', kind] : [])], { cwd: repo, env: env() }); if (r.status !== 0) throw new Error('new-job: ' + r.stdout + r.stderr); };
   f.input = () => put(path.join(f.job, 'input.md'), '# Tarea\nhaz algo\n');
   f.spec = (o) => {
     put(path.join(f.job, 'spec.md'), f.full ? SPEC_FULL(o) : SPEC(o));

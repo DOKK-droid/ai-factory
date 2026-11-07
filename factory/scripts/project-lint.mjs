@@ -483,7 +483,7 @@ export function stamp(c) {
   return { code: 0, out: `STAMPED ${ids.join(' ')}` };
 }
 
-const fmt = (p) => `${p.code} ${p.sev} ${p.doc}${p.doc.includes('.') ? '' : '.md'}${p.line ? ':' + p.line : ''} ${p.msg}`;
+export const fmt = (p) => `${p.code} ${p.sev} ${p.doc}${p.doc.includes('.') ? '' : '.md'}${p.line ? ':' + p.line : ''} ${p.msg}`;
 
 function cli(argv) {
   const args = [], opt = { strict: false, write: false, changed: false, bootstrap: false, dir: DEFAULT_DIR, root: process.cwd(), rootGiven: false, jobsDir: null };
