@@ -51,20 +51,21 @@ Comprobación: el caso «RSC instalado, sync apagado, `AGENTS.md` respetado» en
 
 ## Rama 4 — agentes, comando e inicializador (RF-I10 a RF-I12)
 
-Entrega: `.opencode/agent/{discovery,system-analyst,domain-modeler,architect,deployment-planner,consistency-auditor}.md`, `.opencode/command/factory-init.md`, `factory/scripts/init-project.sh`, entradas del manifiesto del instalador y tests de `init-project.sh` con las cuatro fixtures.
+Entrega (D5/D9: los proyectos instalados nacen con `project_docs: required` y sus agentes leen la base): `.opencode/agent/{discovery,system-analyst,domain-modeler,architect,deployment-planner,consistency-auditor}.md`, `.opencode/command/factory-init.md`, `factory/scripts/init-project.sh`, entradas del manifiesto del instalador y tests de `init-project.sh` con las cuatro fixtures.
 Parche para el humano: seis líneas nuevas en `roles` de `factory/config.json` (modelos de la especificación §10).
 Comprobación: `tests/pipeline-consistency.test.mjs` ampliado (patrones `edit` que empiezan por `*`, cada especialista solo escribe sus archivos, nadie salvo discovery tiene `task`).
 
 ## Rama 5 — integración con el spec y el estado (RF-I15)
 
-Entrega: `spec-lint.mjs` exige `Implementa:` en cada RF cuando hay documentos de proyecto aprobados; plantillas de spec y de página de job con `Implementa:`; `factory/scripts/project-status.mjs` (solo lectura).
-Parche para el humano: validación de `Implementa:` en `brain_problem` de `next-step.sh`.
+Entrega: `spec-lint.mjs` exige `Implementa:` en cada RF cuando hay documentos de proyecto aprobados; plantillas de spec y de página de job con `Implementa:`; `factory/scripts/project-status.mjs` (solo lectura); **`project-lint stamp` y la realineación del spec (RF-I18, especificación §12)**: el `spec.ok` queda ligado a los IDs que el spec cita y un cambio aprobado en la base devuelve el job a `spec-writer`.
+Parche para el humano: validación de `Implementa:` en `brain_problem` de `next-step.sh`; comprobación de `implementa.lock` y estado de realineación en `next-step.sh`; `implementa.lock` en la evidencia protegida de `command-guard.mjs`.
+Comprobación añadida: cambiar `REQ-F-n` después de `spec.ok` devuelve el job a `spec-writer`; cambiar otro ID no.
 
 ## Rama 6 — job de documentación (RF-I9)
 
-Entrega: `new-job.sh` acepta `--kind docs`; `job.json` lleva `kind`; en `next-step.sh` un job `docs` sustituye spec y builder por los agentes de documentación y el gate por `project-lint gate`; el resto del pipeline (reviewers, approver, human-gate, PR) no cambia. `init-project.sh` crea su job como `kind: docs`.
+Entrega: ciclo de cambio de documentación (§1.1 de la especificación, pasos 5 y 6): `new-job.sh` acepta `--kind docs`; `job.json` lleva `kind`; en `next-step.sh` un job `docs` sustituye spec y builder por los agentes de documentación y el gate por `project-lint gate`; el resto del pipeline (reviewers, approver, human-gate, PR) no cambia. `init-project.sh` crea su job como `kind: docs`.
 Parche para el humano: bifurcación por `kind` en `next-step.sh`.
-Riesgo alto: es la rama que más toca el plano de control; va después de comprobar las anteriores.
+Riesgo alto: es la rama que más toca el plano de control; va después de comprobar las anteriores. Punto abierto que esta rama debe cerrar: una base actualizada en `main` no llega a la worktree de un job ya creado (hay que rebasar); el gate de `project_docs` se evalúa sobre la worktree, así que puede aprobar con una base vieja.
 
 ## Rama 7 — ADR y guías
 
@@ -79,8 +80,8 @@ Cada rama termina con: lista de commits, resultado de `node --test tests/*.test.
 - [x] Rama 0 — plan y especificación
 - [x] Rama 1 — `feat/project-docs-base` (plantillas, `project-lint`, `gen-index`; 553 tests en verde; 39 mutaciones detectadas)
 - [x] Rama 2 — `feat/brain-requests` (apilada sobre la rama 1 hasta que se fusione; parche en `docs/propuestas/rama2-brain-requests.patch`, pendiente de aplicar por el humano; 586 tests con el parche, 12 saltados sin él)
-- [ ] Rama 3
-- [ ] Rama 4
+- [x] Rama 3 — `feat/rsc-pinned` (`rsc-pin.json`, `rsc-pin.sh` e integración en `install-into.sh`; sin parche para el humano; 608 tests en verde con `FORCE_COLOR=0` y `=1`, 1 saltado (prueba en vivo con `FACTORY_LIVE_RSC=1`, pasa); 27 mutaciones detectadas, 0 sobrevivieron). Medido en vivo con RSC 3.6.0: `sync` sí registra `auto-update`, pero RSC reescribe `opencode.json` (cambia `git push: deny`); `rsc-pin.sh` lo restaura y fija `gitPermissions=false`. Detalle en el §11 de la especificación
+- [x] Rama 4 — `feat/factory-init` (seis agentes, `/factory-init`, `init-project.sh`, instalador con `project_docs: required` y lectura de la base por los agentes; roles de los seis agentes **aplicados** en `factory/config.json` por indicación del humano y gobernados por `apply-models`; la propia fábrica con `project_docs: required`; `discovery` con rondas de hasta 10 preguntas; 637 tests en verde con `FORCE_COLOR=0` y `=1`, 1 saltado (prueba en vivo de RSC); 43 mutaciones detectadas, 0 sobrevivieron). Verificado con `opencode debug agent` (1.18.35): `task` por agente, `webfetch: ask` y `websearch: deny` se leen como se escriben; **no probado**: el comportamiento en ejecución con un modelo. Consecuencia: en este repo, `/factory` se detiene en `HUMAN_CONFIRM_PROJECT` antes del spec hasta que `/factory-init` deje la base aprobada
 - [ ] Rama 5
 - [ ] Rama 6
 - [ ] Rama 7

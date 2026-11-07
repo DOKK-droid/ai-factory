@@ -14,10 +14,24 @@ Los identificadores de esta especificación son `RF-I<n>` (requisitos) y `CA-I<n
 | D2 | En proyectos nuevos se instala RSC con la versión exacta `3.6.0` (nunca `@latest`), con knowledge-sync y auto-update apagados desde el primer día, y de forma que el apagado viaje en `.rsc.json` | humano |
 | D3 | El inicializador es adaptativo: el modo se deriva del contenido del repo | humano |
 | D4 | Comando `/factory-init`; carpeta `02-DOCS/wiki/project/` | humano, 2026-11-06 |
-| D5 | Política `project_docs: off \| required` (por defecto `off`); con `required`, `next-step.sh` bloquea el spec hasta que la base esté aprobada | humano, 2026-11-06 |
+| D5 | Política `project_docs: off \| required`; con `required`, `next-step.sh` bloquea el spec hasta que la base esté aprobada. **Revisada (2026-11-06): todo proyecto con la fábrica instalada nace con `required`** (`install-into.sh` lo escribe en su `project.json`); `off` queda solo para la propia fábrica y para quien lo ponga a mano | humano, 2026-11-06 |
 | D6 | Modelos: discovery y architect = `go-approver`; system-analyst, domain-modeler, deployment-planner = `sol`; consistency-auditor = `go-security`. `webfetch: ask` solo para discovery, sin `websearch`. **Sin A/B: es un supuesto** | humano, 2026-11-06 |
 | D7 | Apagado de RSC por marcadores más `optOuts` en `.rsc.json` | humano, 2026-11-06 |
+| D9 | **La documentación manda.** Ningún flujo de la fábrica empieza sin la base documental aprobada de punta a punta; todo artefacto (spec, tareas, código) deriva de ella y la cita por ID; un cambio se decide primero en la documentación, con aprobación humana, y solo después vuelve a la fábrica para realinear los artefactos (§1.1) | humano, 2026-11-06 |
 | D8 | **A confirmar.** La frescura de documentos versionados se mide por hash de contenido, no por mtime (ver §5.4). Se mantiene mtime solo para marcas locales ignoradas por git (`brain.ok`) | propuesta |
+
+### 1.1 Ciclo de cambio (D9)
+
+| Paso | Qué ocurre | Quién | Estado |
+|---|---|---|---|
+| 1 | Proyecto nuevo o existente: sin base aprobada no hay spec (`STOP: HUMAN_CONFIRM_PROJECT`). `/factory-init` explora, pregunta al humano y los especialistas redactan; el humano aprueba con `project-lint approve` | humano + discovery | rama 4 (`project_docs=required` por defecto, hecho) |
+| 2 | Trabajo normal: el spec cita lo que implementa (`Implementa: REQ-F-1, UC-2`); builder y approver leen la base antes de actuar | spec-writer, builder | lectura: rama 4 (`brain.agents`); `Implementa:`: rama 5 |
+| 3 | Un agente ve que el código o el spec contradicen o amplían la base: **no la edita**, escribe `brain-request.md` y el job se detiene hasta `brain.ok` (humano) | builder, spec-writer, approver | rama 2 (hecho) |
+| 4 | Con `brain.ok`, el especialista dueño de cada documento lo actualiza; `project-lint` valida; el humano re-aprueba (`project.ok`) | especialistas + humano | rama 2 y 4 (hecho) |
+| 5 | Solo entonces vuelve la fábrica: los artefactos que citan un ID cambiado quedan **desactualizados** y se realinean (`spec.ok` del job en curso se invalida; los jobs entregados salen como «requiere revisión» en `project-status`) | next-step, spec-writer | **rama 5** (hoy no existe: `spec.ok` solo mira la fecha de `spec.md`) |
+| 6 | Un cambio que no nace de un job (requisito nuevo, rediseño) se hace con un job de documentación, con las mismas aprobaciones | humano + discovery | rama 6 |
+
+Lo que hoy **no** cubre el ciclo y las ramas siguientes deben cerrar: (a) cambiar un documento aprobado no invalida un `spec.ok` ya dado; (b) la worktree de un job lleva la base tal como estaba en la rama base al crearse, así que una base actualizada después en `main` no llega al job en curso hasta que se rebasa; (c) nada impide hoy que un humano apruebe un cambio de requisito sin pasar por un job de documentación (la protección es `project.ok` y el PR).
 
 ## 2. Alcance y no-objetivos
 
@@ -44,6 +58,7 @@ Fuera: generar código; sustituir el spec de cada job; ejecutar nunca `sudo`, `i
 | RF-I13 | RSC se instala fijado y con sync y auto-update apagados de forma portable (§11) | 3 |
 | RF-I14 | `install-into.sh` instala plantillas, agentes, linter, comando y RSC fijado; el Brain del destino no hereda nada de la fábrica; `AGENTS.md` no choca con RSC | 3, 4 |
 | RF-I15 | Cada RF del spec mapea a REQ/UC (`Implementa:`); el estado de cada REQ/UC se deriva de jobs, `gate.md` y páginas de job (§12) | 5 |
+| RF-I18 | El `spec.ok` de un job queda ligado a la base: si cambia la definición de cualquier ID que el spec cita en `Implementa:`, `next-step.sh` devuelve el job a `spec-writer` y exige un `spec.ok` nuevo (§12) | 5 |
 | RF-I16 | Tests en directorios temporales con cuatro fixtures; cada test nuevo falla por mutación (§13) | todas |
 | RF-I17 | Lo externo es no confiable: nunca se ejecuta ni se obedece, nunca sustituye una respuesta del humano | 4 |
 
@@ -287,7 +302,12 @@ Orden: system-analyst → domain-modeler → architect → deployment-planner �
 
 - `factory/rsc-pin.json`: `{"version":"3.6.0","integrity":"sha512-o4rEaT24AQfYLjFbRSqgw6oBH3bO2kg++X7xBP2K4XB6JmFumllwsWdwq4v9DtE03OQ+jXIJXEsfVGpXTJyXtg=="}`.
 - `rsc-pin.sh` (dry-run por defecto): comprueba con `npm view @ericrisco/rsc@3.6.0 dist.integrity` que coincide con el pin, instala con `npx --yes @ericrisco/rsc@3.6.0 …` (nunca `@latest`), ejecuta `knowledge-sync off`, crea `.rsc/.no-auto-update`, ejecuta `sync` y verifica que `.rsc.json` contiene `knowledge-sync` y `auto-update` en `optOuts`. Si no, falla.
-- Verificado leyendo el código de RSC 3.6.0 (`targets/opt-outs.js`): ambos están en `PROJECT_OPT_OUTS`. **Supuesto hasta la rama 3**: que `sync` registre `auto-update` y que la instalación en un destino con `AGENTS.md` previo lo conserve; se prueba en un directorio temporal en ambos órdenes.
+- Verificado leyendo el código de RSC 3.6.0 (`targets/opt-outs.js`): ambos están en `PROJECT_OPT_OUTS`. **Verificado ejecutando RSC 3.6.0 real en directorios temporales (rama 3), en ambos órdenes**: `sync` registra `auto-update` en `optOuts` cuando existe `.rsc/.no-auto-update` (y `knowledge-sync off` registra `knowledge-sync`); `onboard` conserva el `AGENTS.md` previo y añade su bloque entre marcadores. Hallazgos que cambian el diseño:
+  - `onboard` no es un «instalar»: pide `--technical-level` y `--goal`, imprime un plan con su id sin escribir nada y solo instala con `--accept-plan <id>`. `rsc-pin.sh --apply` no inventa las respuestas: sin ellas sale 2; con ellas, la primera pasada muestra el plan y sale 3; la segunda, con el id, instala.
+  - En un proyecto nuevo RSC activa `gitPermissions` y **reescribe `opencode.json`**: cambia `git push: deny` por `allow` y `git push --force*` por `ask`; con `git-permissions off` quita sus claves sin devolver las de la fábrica. `rsc-pin.sh` ejecuta `git-permissions off`, guarda `opencode.json` antes y lo restaura después, y `--check` falla si en el `opencode.json` de la fábrica falta `git push: deny`. El muro real sigue siendo la config managed de `/etc/opencode`.
+  - Los marcadores `.rsc/.no-*` son locales (`.rsc/` está ignorado); lo que viaja con el repo es `.rsc.json`. `--check` los trata como aviso, no como error.
+  - `install-into.sh --check` comparaba `AGENTS.md` byte a byte y fallaba tras instalar RSC; ahora ignora el bloque `rsc-suggest`.
+  - Además: un `rsc sync` manual posterior vuelve a reescribir `opencode.json`; `rsc-pin.sh --check` (y `install-into.sh --check`) lo detectan.
 - `AGENTS.md`: el instalador nunca sobrescribe el existente (deja `AGENTS.factory.md`); RSC escribe entre marcadores. Un test prueba que el bloque de RSC y el contenido previo sobreviven.
 - La fábrica funciona sin RSC: todo paso de RSC es opcional y ningún script de la fábrica lo invoca salvo `rsc-pin.sh`.
 
@@ -295,6 +315,7 @@ Orden: system-analyst → domain-modeler → architect → deployment-planner �
 
 - Cada RF del spec (perfil `full`) termina con `Implementa: REQ-F-1, UC-2`. `spec-lint` lo exige y comprueba que los IDs existen cuando la política es `required` y hay documentos aprobados.
 - La página del job lleva la línea `Implementa: …` (unión de las del spec); `next-step.sh` la valida en `brain_problem`.
+- **Realineación (RF-I18).** Al confirmar el spec (`spec.ok`), `next-step.sh` ejecuta `project-lint stamp <job>`, que guarda en `factory/jobs/<id>/implementa.lock` el hash de cada bloque citado en `Implementa:` (el mismo hash por bloque que `project.ok` usa en `refs`). En cada llamada compara; si algún bloque cambió o desapareció responde `DELEGATE: @spec-writer` con los IDs afectados y borra la confirmación pendiente (hace falta un `spec.ok` nuevo). El archivo lo escribe el script y el guard lo protege como `gate.md`. Cambios en `next-step.sh` y `command-guard.mjs`: parche para el humano.
 - `project-status.mjs [--json]` (solo lectura) deriva el estado de cada REQ/UC: `sin job` · `en curso (job X)` · `implementado (job X, PR, commit del gate, tests)`. Fuentes: `factory/jobs/*/spec.md`, `gate.md`, `pr.url` y `02-DOCS/wiki/jobs/*.md`. Fuera del equipo local `gate.md` no existe (los jobs están ignorados por git): entonces cita el commit que figura en la página del job y marca la evidencia como «no verificable aquí». Nada se escribe a mano.
 
 ## 13. Tests y mutaciones
@@ -344,6 +365,7 @@ Cada código `PLxxx` tiene un test que lo provoca y otro que comprueba que el ca
 | RF-I7, I8 | 2 | CA-I7.1 petición sin `brain.ok` → `HUMAN_CONFIRM_BRAIN`; CA-I7.2 con `APPROVE` y petición pendiente no se avanza; CA-I8.1 `required` sin base aprobada → `HUMAN_CONFIRM_PROJECT` |
 | RF-I13, I14 | 3 | CA-I13.1 `.rsc.json` contiene los dos `optOuts`; CA-I14.1 `AGENTS.md` previo intacto |
 | RF-I10, I11, I12, I17 | 4 | CA-I10.1 las cuatro fixtures dan el `MODE` esperado; CA-I10.2 repetir el script no cambia nada; CA-I10.3 cero llamadas a `sudo` |
+| RF-I18 | 5 | CA-I18.1 cambiar `REQ-F-3` tras `spec.ok` devuelve el job a `spec-writer`; CA-I18.2 cambiar `REQ-F-9`, que el spec no cita, no lo toca |
 | RF-I15 | 5 | CA-I15.1 RF sin `Implementa:` → error de `spec-lint`; CA-I15.2 el estado de un REQ cambia al aparecer su job |
 | RF-I9 | 6 | CA-I9.1 un job `docs` llega a PR sin builder |
 | RF-I16 | todas | informe de mutaciones por rama |
