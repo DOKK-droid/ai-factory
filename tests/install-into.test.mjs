@@ -90,7 +90,10 @@ test('--apply: el index.md del destino solo enlaza a archivos que existen y cont
   const pj = JSON.parse(read(d, 'factory/project.json'));
   assert.equal(pj.require_spec_ok, true); assert.equal(pj.spec_profile, 'full'); assert.equal(pj.max_rounds, 3); assert.deepEqual(pj.human_review_surfaces, []);
   assert.ok(pj.brain.agents['spec-writer'].includes('02-DOCS/wiki/context.md'));
-  for (const p of pj.brain.agents['spec-writer']) assert.ok(exists(d, p), `project.json cita ${p}, que no existe`);
+  // la base documental (02-DOCS/wiki/project/) la crea /factory-init: next-step.sh ignora estas paginas mientras no existan
+  for (const [a, pages] of Object.entries(pj.brain.agents)) for (const p of pages) if (!p.startsWith('02-DOCS/wiki/project/')) assert.ok(exists(d, p), `project.json cita ${p} (${a}), que no existe`);
+  assert.equal(pj.project_docs, 'required', 'un proyecto con la fabrica exige la base documental aprobada antes del primer spec');
+  assert.ok(pj.brain.agents['spec-writer'].includes('02-DOCS/wiki/project/01-requisitos.md') && pj.brain.agents.builder.includes('02-DOCS/wiki/project/04-arquitectura.md') && pj.brain.agents.approver.includes('02-DOCS/wiki/project/02-casos-de-uso.md'));
 });
 
 test('nombre del proyecto: --name y por defecto el de la carpeta; un nombre raro se rechaza', () => {
@@ -182,6 +185,17 @@ test('integracion: en el destino instalado next-step.sh crea un job y responde (
   assert.equal(ns.status, 0, ns.stdout + ns.stderr); assert.match(ns.stdout, /^DELEGATE: @intake \| .+ \| factory\/jobs\//m); assert.match(ns.stdout, /READ: 02-DOCS\/wiki\/index\.md/);
   assert.ok(!ns.stdout.includes(REPO), 'no debe apuntar a la fabrica original');
   assert.equal(git(d, 'status', '--porcelain'), '', 'jobs y worktrees quedan ignorados por git');
+});
+
+test('la documentacion manda: un proyecto recien instalado analiza (intake) pero no escribe spec hasta que la base documental este aprobada', () => {
+  const d = installed(); git(d, 'add', '-A'); git(d, 'commit', '-qm', 'instala la fabrica');
+  const env = { ...process.env, FACTORY_BASE: 'main' };
+  const id = run('bash', ['01-TOOLS/next-step.sh', '--new-id', 'tarea de prueba'], { cwd: d, env }).stdout.trim().split('\n')[0];
+  assert.equal(run('bash', ['01-TOOLS/new-job.sh', id], { cwd: d, env }).status, 0);
+  write(path.join(d, `factory/jobs/${id}/input.md`), '# Input\n\nHaz algo.\n');
+  const ns = run('bash', ['01-TOOLS/next-step.sh', id], { cwd: d, env });
+  assert.match(ns.stdout, /^STOP: HUMAN_CONFIRM_PROJECT/m, ns.stdout); assert.match(ns.stdout, /project_docs=required/); assert.match(ns.stdout, /\/factory-init/);
+  assert.doesNotMatch(ns.stdout, /DELEGATE: @spec-writer/, 'ningun agente escribe spec sin base documental');
 });
 
 // ---------------------------------------------------------------------------------------------------------
