@@ -10,11 +10,17 @@
 #   2. SINTAXIS  cada archivo cambiado (js/mjs/cjs, json, sh, py) parsea
 #   3. lint, typecheck y la suite de tests del proyecto
 #   4. Los tests que el job CAMBIO se ejecutan explicitamente (la suite puede no incluirlos)
+#
+# Job de documentacion (job.json `kind: docs`, RF-I9): el gate es otro, mismo formato de gate.md. Comprueba que los cambios caben en la
+# base documental (y en lo que declara el Alcance del spec), project-lint check --strict y que no queden marcadores sin confirmar en
+# los documentos tocados (factory/scripts/docs-job.mjs gate). No ejecuta los tests del proyecto: no hay codigo que probar.
+# Un job.json sin `kind` es un job de codigo; cualquier otro valor falla cerrado.
 # Variables: FACTORY_TEST_CMD, FACTORY_ALLOW_NO_TESTS=1, FACTORY_CONFIG, FACTORY_JOBS_DIR, FACTORY_BASE
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCOPE_JS="${HERE}/../factory/scripts/scope-check.mjs"
+DOCS_JS="${HERE}/../factory/scripts/docs-job.mjs"
 
 JOB_ID="${1:-}"
 JOBS_DIR="$(factory_jobs_dir)"
@@ -34,6 +40,29 @@ run_step() {
   if [ "$rc" -ne 0 ]; then say "   FALLO (${name}, codigo ${rc})"; FAILED=1; else say "   OK (${name})"; fi
 }
 
+# Cierra el gate: imprime el resultado y escribe gate.md (linea 1 GATE:, COMMIT:, GATE_FAIL_STREAK:). Lo comparten el gate de codigo y el de documentacion.
+finish() {
+  RESULT="PASS"; [ "$FAILED" -ne 0 ] && RESULT="FAIL"
+  say "=== Gate: ${RESULT} ==="
+
+  if [ -n "$JOB_ID" ]; then
+    mkdir -p "${JOBS_DIR}/${JOB_ID}"
+    # `COMMIT:` ata el resultado al HEAD que se comprobo: next-step.sh lo trata como obsoleto si HEAD cambia.
+    # `GATE_FAIL_STREAK:` cuenta gates FAIL seguidos (se lee del gate.md anterior) para acotar el bucle con el builder.
+    PREV_STREAK="$(sed -n 's/^GATE_FAIL_STREAK: \([0-9][0-9]*\)\r\{0,1\}$/\1/p' "${JOBS_DIR}/${JOB_ID}/gate.md" 2>/dev/null | head -1)"
+    STREAK=0; [ "$RESULT" = "FAIL" ] && STREAK=$(( ${PREV_STREAK:-0} + 1 ))
+    HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+    {
+      echo "GATE: ${RESULT}"
+      [ -z "$HEAD_SHA" ] || echo "COMMIT: ${HEAD_SHA}"
+      echo "GATE_FAIL_STREAK: ${STREAK}"
+      if [ "${#UNVERIFIED[@]}" -gt 0 ]; then echo "UNVERIFIED_TESTS: $(IFS=,; echo "${UNVERIFIED[*]}")"; fi
+      echo; cat "$LOG"
+    } > "${JOBS_DIR}/${JOB_ID}/gate.md"
+  fi
+  [ "$FAILED" -eq 0 ]
+}
+
 say "=== Gate determinista ==="
 
 # `node --check x.js` devuelve 0 sobre un .js ROTO si usa sintaxis ESM sin "type": "module" (falso verde).
@@ -44,6 +73,27 @@ js_syntax_ok() {
   if node --check "$t/a.mjs" >"$t/o" 2>&1 || node --check "$t/a.cjs" >"$t/o2" 2>&1; then rm -rf "$t"; return 0; fi
   out="$(grep -m1 -E 'SyntaxError' "$t/o" || head -n1 "$t/o")"; rm -rf "$t"; printf '%s' "$out"; return 1
 }
+
+# ---------- kind del job: documentacion (docs) o codigo ----------
+KIND=code
+if [ -n "$JOB_ID" ] && [ -f "${JOBS_DIR}/${JOB_ID}/job.json" ]; then
+  KIND="$(node -p "try{const k=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).kind;String(k===undefined?'code':(typeof k==='string'&&k?k:'INVALIDO:'+JSON.stringify(k)))}catch(e){'ILEGIBLE'}" "${JOBS_DIR}/${JOB_ID}/job.json" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | head -1)"
+  [ -n "$KIND" ] || KIND=ILEGIBLE
+fi
+case "$KIND" in
+  code) ;;
+  docs)
+    MB="$(factory_merge_base || true)"
+    if [ -z "$MB" ]; then fail_step docs "no pude calcular el merge-base con la rama base"
+    else
+      say "-> gate de documentacion (kind: docs): sin tests del proyecto"
+      OUT="$(node "$DOCS_JS" gate --job-dir "${JOBS_DIR}/${JOB_ID}" --merge-base "$MB" 2>&1)"; RC=$?
+      [ -z "$OUT" ] || printf '%s\n' "$OUT" | head -n 200 | tee -a "$LOG"
+      if [ "$RC" -ne 0 ]; then say "   FALLO (docs, codigo ${RC})"; FAILED=1; else say "   OK (docs)"; fi
+    fi
+    finish; exit $? ;;
+  *) fail_step kind "job.json tiene un kind que no entiendo ('${KIND}'): solo code o docs. No me salto comprobaciones; el gate queda en FAIL" ;;
+esac
 
 # ---------- 0. Cambios reales del job (si hay git y rama base) ----------
 CHANGES=""
@@ -144,23 +194,4 @@ if [ -n "$CHANGED_TESTS" ]; then
     else UNVERIFIED+=("${PY_TESTS[@]}"); say "-> tests python cambiados SIN pytest (no verificados): ${PY_TESTS[*]}"; fi
   fi
 fi
-
-RESULT="PASS"; [ "$FAILED" -ne 0 ] && RESULT="FAIL"
-say "=== Gate: ${RESULT} ==="
-
-if [ -n "$JOB_ID" ]; then
-  mkdir -p "${JOBS_DIR}/${JOB_ID}"
-  # `COMMIT:` ata el resultado al HEAD que se comprobo: next-step.sh lo trata como obsoleto si HEAD cambia.
-  # `GATE_FAIL_STREAK:` cuenta gates FAIL seguidos (se lee del gate.md anterior) para acotar el bucle con el builder.
-  PREV_STREAK="$(sed -n 's/^GATE_FAIL_STREAK: \([0-9][0-9]*\)\r\{0,1\}$/\1/p' "${JOBS_DIR}/${JOB_ID}/gate.md" 2>/dev/null | head -1)"
-  STREAK=0; [ "$RESULT" = "FAIL" ] && STREAK=$(( ${PREV_STREAK:-0} + 1 ))
-  HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
-  {
-    echo "GATE: ${RESULT}"
-    [ -z "$HEAD_SHA" ] || echo "COMMIT: ${HEAD_SHA}"
-    echo "GATE_FAIL_STREAK: ${STREAK}"
-    if [ "${#UNVERIFIED[@]}" -gt 0 ]; then echo "UNVERIFIED_TESTS: $(IFS=,; echo "${UNVERIFIED[*]}")"; fi
-    echo; cat "$LOG"
-  } > "${JOBS_DIR}/${JOB_ID}/gate.md"
-fi
-[ "$FAILED" -eq 0 ]
+finish
