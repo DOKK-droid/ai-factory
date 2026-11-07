@@ -39,6 +39,7 @@ permission:
     "*factory/jobs/*/spec.ok": deny
     "*factory/jobs/*/review.ok": deny
     "*factory/jobs/*/brain.ok": deny
+    "*factory/jobs/*/implementa.lock": deny
     "*02-DOCS/wiki/project/*": deny
     "*factory/jobs/*/pr.url": deny
   bash:

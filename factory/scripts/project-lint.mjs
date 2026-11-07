@@ -18,11 +18,17 @@
  *   node project-lint.mjs trace   [--write] [...]                    trazabilidad.md (derivado, nunca a mano)
  *   node project-lint.mjs approve <documento...> [...]               humano: registra el hash y marca aprobado
  *   node project-lint.mjs gate    [...]                              0 solo si los 7 documentos estan aprobados y frescos
+ *   node project-lint.mjs stamp   <job> [--root R] [--jobs-dir J]    liga el spec confirmado a la base: factory/jobs/<job>/implementa.lock
+ *   node project-lint.mjs realign <job> [--root R] [--jobs-dir J]    solo lectura: NONE | STAMP | OK | DRIFT | INVALID (lo traduce next-step.sh)
+ * stamp/realign (RF-I18): el hash de cada bloque que el spec cita en `Implementa:` se guarda al confirmarse el spec (spec.ok); si luego
+ * cambia o desaparece alguno, el job vuelve al spec-writer. R = raiz con la base (por defecto la worktree del job, si existe).
  * Salida: 0 sin errores, 1 con errores, 64 uso incorrecto.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { implementaIds } from './spec-lint.mjs';
 
 export const DEFAULT_DIR = '02-DOCS/wiki/project';
 export const DOCS = ['00-vision', '01-requisitos', '02-casos-de-uso', '03-dominio', '04-arquitectura', '05-datos', '06-despliegue'];
@@ -369,14 +375,101 @@ export function gate(opts = {}) {
   return [...new Set(out)];
 }
 
+
+// ---------------------------------------------------------------- Implementa: contexto, stamp y realign (RF-I15, RF-I18)
+const JOB_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$/;
+const isDir = (d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+const mtimeNs = (f) => { try { return fs.statSync(f, { bigint: true }).mtimeNs; } catch { return null; } };
+/** a es mas nuevo que b (como `[ a -nt b ]`: si b no existe, a es mas nuevo; si a no existe, no). */
+const newer = (a, b) => { const x = mtimeNs(a), y = mtimeNs(b); return x !== null && (y === null || x > y); };
+const readText = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
+
+/** Raiz del checkout principal (el de .git comun) aunque se invoque desde una worktree. */
+export function mainRoot(cwd = process.cwd()) {
+  try { return path.dirname(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()); }
+  catch { return cwd; }
+}
+
+/**
+ * Lo que spec-lint necesita para decidir si `Implementa:` es obligatorio y contra que IDs comprobarlo.
+ * Base: --root, o la worktree del job (deducida de la ruta del spec: <jobs>/<id>/spec.md), o el checkout principal.
+ * required = project_docs=required en factory/project.json, o ya hay documentos aprobados en project.ok.
+ */
+export function projectContext({ specPath = null, root = null, env = process.env } = {}) {
+  const main = mainRoot();
+  let base = root ? path.resolve(root) : main;
+  if (!root && specPath) {
+    const id = path.basename(path.dirname(path.resolve(specPath)));
+    const wt = path.join(main, 'factory/worktrees', id);
+    if (JOB_ID_RE.test(id) && !id.includes('..') && isDir(wt)) base = wt;
+  }
+  let required = false;
+  try { required = JSON.parse(readText(env.FACTORY_PROJECT_FILE || path.join(root ? base : main, 'factory/project.json'))).project_docs === 'required'; } catch { /* sin politica = off */ }
+  const a = analyze({ root: base });
+  return { required: required || Object.keys(a.reg.docs).length > 0, defined: new Set(a.defs.keys()) };
+}
+
+function jobCtx(id, { root = null, jobsDir = null, env = process.env } = {}) {
+  if (!JOB_ID_RE.test(id || '') || id.includes('..')) return null;
+  const main = mainRoot();
+  const wt = path.join(main, 'factory/worktrees', id);
+  const jobDir = path.join(jobsDir || env.FACTORY_JOBS_DIR || path.join(main, 'factory/jobs'), id);
+  return { id, jobDir, base: root ? path.resolve(root) : isDir(wt) ? wt : main, spec: path.join(jobDir, 'spec.md'), specOk: path.join(jobDir, 'spec.ok'), lock: path.join(jobDir, 'implementa.lock') };
+}
+
+/** implementa.lock -> { ids } o { err }. Formato: {"version":1,"ids":{"REQ-F-1":"<sha256 del bloque>"}} */
+export function readLock(file) {
+  let j; try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return { err: 'implementa.lock ilegible (no es JSON)' }; }
+  if (!j || j.version !== 1 || typeof j.ids !== 'object' || !j.ids || Array.isArray(j.ids) || Object.values(j.ids).some((h) => typeof h !== 'string' || !h)) return { err: 'implementa.lock con un formato que no entiendo' };
+  return { ids: j.ids };
+}
+
+const hashes = (base) => new Map([...analyze({ root: base }).defs].map(([id, d]) => [id, d.hash]));
+const sortIds = (ids) => ids.sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+
+/** Solo lectura. Devuelve las lineas de respuesta: la primera es NONE | STAMP | OK | DRIFT | INVALID y despues `CLAVE: valor`. */
+export function realign(c) {
+  const ids = implementaIds(readText(c.spec));
+  if (!ids.length) return ['NONE'];
+  if (!fs.existsSync(c.specOk)) return ['INVALID', 'WHY: spec.ok no existe: no hay una confirmación del humano a la que ligar el spec'];
+  if (newer(c.spec, c.specOk)) return ['INVALID', 'WHY: spec.md es más nuevo que spec.ok: el humano debe confirmar de nuevo el spec'];
+  if (!fs.existsSync(c.lock) || newer(c.specOk, c.lock)) return ['STAMP', `CMD: node factory/scripts/project-lint.mjs stamp ${c.id}`, `WHY: el humano confirmó el spec y aún no está ligado a la base: implementa.lock guarda el hash de ${ids.join(', ')}`];
+  const lock = readLock(c.lock);
+  if (lock.err) return ['INVALID', `WHY: ${lock.err}`];
+  if (JSON.stringify(sortIds(Object.keys(lock.ids))) !== JSON.stringify(ids)) return ['INVALID', `WHY: implementa.lock no corresponde al spec (liga ${sortIds(Object.keys(lock.ids)).join(', ') || 'nada'} y el spec cita ${ids.join(', ')})`];
+  const now = hashes(c.base);
+  const drift = ids.filter((id) => now.get(id) !== lock.ids[id]);
+  if (!drift.length) return ['OK'];
+  return ['DRIFT', `IDS: ${drift.join(',')}`, 'OWNER: spec-writer', `FILES: factory/jobs/${c.id}/spec.md,factory/jobs/${c.id}/tasks.md`,
+    `WHAT: realinear el spec con la base documental: ${drift.join(', ')} cambió o desapareció desde que el humano confirmó el spec. Revisa los RF que lo implementan (y tasks.md) y deja spec.md modificado aunque sea con una nota, para que el humano lo confirme de nuevo (spec.ok)`,
+    ...drift.map((id) => `WHY: ${id} ${now.has(id) ? 'cambió' : 'ya no existe'} en la base documental desde que se confirmó el spec`)];
+}
+
+/** Escribe implementa.lock. Solo con una confirmacion del humano posterior al ultimo lock: un agente no puede "ponerse al dia" solo. */
+export function stamp(c) {
+  const ids = implementaIds(readText(c.spec));
+  if (!ids.length) return { code: 0, out: 'NONE' };
+  const no = (m) => ({ code: 1, err: `stamp: ${m}` });
+  if (!fs.existsSync(c.specOk)) return no('no hay spec.ok: el humano aún no confirmó el spec');
+  if (newer(c.spec, c.specOk)) return no('spec.md es más nuevo que spec.ok: el humano debe confirmar de nuevo el spec');
+  if (fs.existsSync(c.lock) && !newer(c.specOk, c.lock)) return no('el spec ya está ligado (implementa.lock es igual o más nuevo que spec.ok): no hay una confirmación nueva del humano');
+  const now = hashes(c.base), missing = ids.filter((id) => !now.has(id));
+  if (missing.length) return no(`el spec cita ${missing.join(', ')}, que la base documental no define`);
+  const tmpf = `${c.lock}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpf, JSON.stringify({ version: 1, ids: Object.fromEntries(ids.map((id) => [id, now.get(id)])) }, null, 2) + '\n');
+  fs.renameSync(tmpf, c.lock);
+  return { code: 0, out: `STAMPED ${ids.join(' ')}` };
+}
+
 const fmt = (p) => `${p.code} ${p.sev} ${p.doc}${p.doc.includes('.') ? '' : '.md'}${p.line ? ':' + p.line : ''} ${p.msg}`;
 
 function cli(argv) {
-  const args = [], opt = { strict: false, write: false, changed: false, dir: DEFAULT_DIR, root: process.cwd() };
+  const args = [], opt = { strict: false, write: false, changed: false, dir: DEFAULT_DIR, root: process.cwd(), rootGiven: false, jobsDir: null };
   for (let i = 0; i < argv.length; i++) {
     const x = argv[i];
     if (x === '--strict') opt.strict = true; else if (x === '--write') opt.write = true; else if (x === '--changed') opt.changed = true;
-    else if (x === '--dir' || x === '--root') { if (!argv[i + 1]) return usage(); opt[x.slice(2)] = argv[++i]; }
+    else if (x === '--dir' || x === '--root') { if (!argv[i + 1]) return usage(); opt[x.slice(2)] = argv[++i]; if (x === '--root') opt.rootGiven = true; }
+    else if (x === '--jobs-dir') { if (!argv[i + 1]) return usage(); opt.jobsDir = argv[++i]; }
     else if (x.startsWith('--')) return usage(); else args.push(x);
   }
   const [cmd, ...rest] = args;
@@ -412,8 +505,14 @@ function cli(argv) {
     return r.ok ? 0 : 1;
   }
   if (cmd === 'gate') { const o = gate(base); o.forEach((l) => console.log(l)); return o.length ? 1 : 0; }
+  if (cmd === 'stamp' || cmd === 'realign') {
+    const c = jobCtx(rest[0], { root: opt.rootGiven ? opt.root : null, jobsDir: opt.jobsDir });
+    if (!c || rest.length !== 1) return usage();
+    if (cmd === 'realign') { realign(c).forEach((l) => console.log(l)); return 0; }
+    const r = stamp(c); if (r.out) console.log(r.out); if (r.err) console.error(r.err); return r.code;
+  }
   return usage();
 }
-function usage() { console.error('uso: project-lint.mjs check|state|impact|trace|approve|gate [--dir D] [--root R] [--strict] [--write] [--changed]'); return 64; }
+function usage() { console.error('uso: project-lint.mjs check|state|impact|trace|approve|gate [--dir D] [--root R] [--strict] [--write] [--changed] | stamp|realign <job> [--root R] [--jobs-dir J]'); return 64; }
 
 if (import.meta.url === `file://${process.argv[1]}`) process.exit(cli(process.argv.slice(2)));

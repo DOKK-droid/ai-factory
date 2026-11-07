@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { REPO, tmp, write, git, run } from './helpers.mjs';
+import { implementaIds } from '../factory/scripts/spec-lint.mjs';
 export const COMMIT_BRAIN = path.join(REPO, '01-TOOLS/commit-brain.sh');
 
 export const NEXT = path.join(REPO, '01-TOOLS/next-step.sh');
@@ -17,7 +18,8 @@ export const put = (file, text) => { write(file, text); stamp(file); };
 export const SPEC = ({ surface = 'none', alcance = '- src/**', criteria = '1. Hace X\n2. Hace Y', title = '# Spec de prueba' } = {}) =>
   `${title}\nSurface: ${surface}\n\n## Criterios\n${criteria}\n\nAlcance:\n${alcance}\n`;
 
-export const SPEC_FULL = ({ surface = 'none', adr = 'none', title = '# Spec de prueba', extra = '' } = {}) => `${title}
+// implementa: lista (una entrada por RF) con lo que cada RF implementa de la base documental, p. ej. ['REQ-F-1', 'REQ-F-2, UC-2']
+export const SPEC_FULL = ({ surface = 'none', adr = 'none', title = '# Spec de prueba', extra = '', implementa = null } = {}) => `${title}
 Surface: ${surface}
 ADR: ${adr}
 
@@ -29,8 +31,8 @@ Acotar numeros.
 - Suite de tests: verifica el comportamiento
 
 ## Requisitos funcionales
-- RF-1: acota por debajo de min
-- RF-2: acota por encima de max
+- RF-1: acota por debajo de min${implementa?.[0] ? `. Implementa: ${implementa[0]}` : ''}
+- RF-2: acota por encima de max${implementa?.[1] ? `. Implementa: ${implementa[1]}` : ''}
 
 ## Diseño
 - src/feature.js exporta la funcion pura
@@ -109,7 +111,7 @@ export function fx({ project = null, config = null, remote = true, id = 'job-1',
   f.human = (l1 = 'NEEDS_HUMAN', summary = true) => put(path.join(f.job, 'human.md'), `${l1}\n\n## Riesgos detectados\n- Ninguno.\n${summary ? '\n## Resumen para el humano\nTodo bien.\n' : ''}`);
   f.trace = (brain = 'Brain: sin cambios') => put(path.join(f.job, 'trace.md'), `# trace\n${brain}\n`);
   /** Simula al memory-curator: escribe el Brain EN LA WORKTREE (sin commitear) y la linea Brain: de trace.md. */
-  f.curate = ({ skipHeading = null, gateSha = true, listJobPage = true, extraPage = null, adrStatus = (f.requireSpecOk === false ? 'Propuesto' : 'Aprobado') } = {}) => {
+  f.curate = ({ skipHeading = null, gateSha = true, listJobPage = true, extraPage = null, implementaLine = true, adrStatus = (f.requireSpecOk === false ? 'Propuesto' : 'Aprobado') } = {}) => {
     const spec = fs.readFileSync(path.join(f.job, 'spec.md'), 'utf8'); const gate = fs.readFileSync(path.join(f.job, 'gate.md'), 'utf8');
     const adr = (spec.match(/^ADR:\s*(.*)$/m) || [])[1] || 'none'; const sha7 = (gate.match(/^COMMIT: (\w{7})/m) || [])[1];
     const pages = []; const wt = (rel) => path.join(f.wt, rel);
@@ -117,7 +119,8 @@ export function fx({ project = null, config = null, remote = true, id = 'job-1',
       const page = `02-DOCS/wiki/jobs/${id}.md`;
       const sec = ['Resumen', 'Actores', 'Requisitos funcionales', 'Diseño', 'Implementación', 'Pruebas', 'Lecciones'].filter((h) => h !== skipHeading)
         .map((h) => `## ${h}\n${h === 'Pruebas' && gateSha ? `Gate sobre el commit ${sha7}: GATE: PASS\n` : 'texto\n'}`).join('\n');
-      write(wt(page), `# job ${id}\n\n${sec}`); if (listJobPage) pages.push(page);
+      const impl = implementaIds(spec); const implLine = impl.length && implementaLine ? `Implementa: ${impl.join(', ')}\n\n` : '';   // el spec cita la base: la pagina lleva la misma union
+      write(wt(page), `# job ${id}\n\n${implLine}${sec}`); if (listJobPage) pages.push(page);
     }
     const idx = fs.readFileSync(wt('02-DOCS/wiki/index.md'), 'utf8'); write(wt('02-DOCS/wiki/index.md'), idx + `| job ${id} | \`02-DOCS/wiki/jobs/${id}.md\` | doc |\n`); pages.push('02-DOCS/wiki/index.md');
     if (adr !== 'none') {

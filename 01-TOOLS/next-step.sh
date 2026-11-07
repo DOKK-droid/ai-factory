@@ -27,6 +27,11 @@
 # Marcas del humano (las crea el humano con `touch`; el guard impide que un agente las cree):
 #   spec.ok (spec confirmado), review.ok (superficie que exige revision humana), pr.url (PR creado a mano),
 #   brain.ok (peticion de cambio al Brain normativo confirmada; ver factory/scripts/brain-request.mjs).
+# implementa.lock (hash de cada bloque de la base que el spec cita en Implementa:) NO es una marca del humano: la escribe
+#   `project-lint stamp`, que solo acepta una confirmacion nueva (spec.ok mas nuevo que el lock). Si un bloque cambia despues, el
+#   bloque 3b devuelve el job al spec-writer y hace falta un spec.ok nuevo (factory/scripts/project-lint.mjs, comando realign).
+#   Un lock mas nuevo que gate.md o que round-N/.commit invalida el gate y los reviews (estados 5 y 7): el spec cambio despues; se repite
+#   gate -> 4 reviewers -> approver, que decide (CHANGES al builder, ESCALATE al humano o APPROVE). max_rounds acota las pasadas.
 #
 # Obsolescencia atada al commit: gate.md lleva `COMMIT: <sha>` y round-N/.commit el sha revisado; si HEAD de la
 # worktree es otro, el artefacto es OBSOLETO (salvo que lo posterior solo toque paginas del curator: factory_commit_fresh). decision.md y human.md se consideran vigentes solo si son MAS
@@ -77,7 +82,7 @@ brain_read() { # brain_read <agente>: paginas del Brain que ese agente debe leer
 }
 phase() { # fase metodologica del estado: el flujo es Análisis -> Diseño -> Desarrollo -> Pruebas -> Revisión -> Documentación -> Entrega
   case "$1" in
-    0|1) echo "Análisis" ;; 2|3) echo "Análisis y diseño" ;; 4|6|9) echo "Desarrollo" ;; 5|7) echo "Pruebas" ;;
+    0|1) echo "Análisis" ;; 2|3|align) echo "Análisis y diseño" ;; 4|6|9) echo "Desarrollo" ;; 5|7) echo "Pruebas" ;;
     8|10|11b) echo "Revisión" ;; 11) echo "Documentación" ;; 12|13|14) echo "Entrega" ;; *) echo "" ;;
   esac; }
 meta() { [ -z "${STATE}" ] || { echo "STATE: ${STATE}"; local ph; ph="$(phase "$STATE")"; [ -z "$ph" ] || echo "PHASE: ${ph}"; }; }
@@ -229,6 +234,25 @@ Lee ${SPEC} y, si esta bien, confirma con el CMD (solo el humano crea esta marca
   fi
 fi
 
+# ---------- 3b. realineacion: el spec confirmado queda ligado a los bloques de la base que cita en Implementa: (RF-I18) ----------
+# Toda la logica vive en `project-lint.mjs realign` (solo lectura); aqui solo se traduce la primera palabra de su respuesta.
+# Cualquier otra respuesta (vacia, error de node, texto raro) es un STOP: fail-closed. Sin spec.ok exigido no hay confirmacion a la que ligar.
+if [ "$REQUIRE_SPEC_OK" = "1" ]; then
+  STATE=align
+  AL="$(node "$PROJECT_LINT" realign "$JOB_ID" --root "$WT" --jobs-dir "$JOBS_DIR" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')"
+  AL_FIRST="$(printf '%s\n' "$AL" | head -1)"
+  al() { printf '%s\n' "$AL" | sed -n "s/^$1: //p"; }   # valor(es) de la linea "CLAVE: valor"
+  case "$AL_FIRST" in
+    NONE|OK) ;;
+    STAMP) [ -n "$(al CMD)" ] || stop IMPLEMENTA_INVALID "project-lint realign pidio un stamp sin comando"
+      run_ "$(al CMD)" "$(al WHY)" ;;
+    DRIFT) [ -n "$(al OWNER)" ] && [ -n "$(al FILES)" ] && [ -n "$(al WHAT)" ] || stop IMPLEMENTA_INVALID "project-lint realign no indico agente, archivos o tarea para el DRIFT"
+      delegate "$(al OWNER)" "$(al WHAT)" "$(al FILES)" "$(al WHY | paste -sd';' - | sed 's/;/; /g')" ;;
+    INVALID) stop IMPLEMENTA_INVALID "$(al WHY)" ;;
+    *) stop IMPLEMENTA_INVALID "project-lint realign devolvio una respuesta inesperada ('$(printf '%s' "$AL_FIRST" | cut -c1-60)'); no avanzo" ;;
+  esac
+fi
+
 # ---------- 4. el builder ha commiteado algo? ----------
 STATE=4
 # Los commits que solo tocan la base documental (peticiones aplicadas, 1b) no son trabajo del builder.
@@ -255,6 +279,9 @@ GATE_COMMIT="$(sed -n '1,8p' "$GATE" | sed -n 's/^COMMIT: \([0-9a-f]\{7,40\}\)\r
 case "$GATE_L1" in "GATE: PASS"|"GATE: FAIL") ;; *) run_ "$CHECKS_CMD" "gate.md ilegible (linea 1: '${GATE_L1}'): se regenera con el script" ;; esac
 [ -n "$GATE_COMMIT" ] || run_ "$CHECKS_CMD" "gate.md sin linea COMMIT: no se puede atar a un commit"
 fresh "$GATE_COMMIT" || run_ "$CHECKS_CMD" "gate.md obsoleto (es de ${GATE_COMMIT:0:7}, HEAD es ${HEAD_SHA:0:7})"
+# El spec se ligo a la base DESPUES de este gate (implementa.lock mas nuevo): el gate es de un spec anterior.
+LOCK="${JOB_DIR}/implementa.lock"
+if [ -f "$LOCK" ] && [ "$LOCK" -nt "$GATE" ]; then run_ "$CHECKS_CMD" "gate.md es anterior a implementa.lock: el spec se confirmo (o se realineo con la base) despues de este gate; se repite"; fi
 
 # rondas existentes
 CUR=0
@@ -286,6 +313,7 @@ RDIR="${JOB_DIR}/round-${CUR}"
 RC="$(head -1 "${RDIR}/.commit" 2>/dev/null | trim)"
 if [ -z "$RC" ]; then launch "$CUR" "la ronda ${CUR} no termino (sin .commit): se repite"
 elif ! fresh "$RC"; then launch $((CUR + 1)) "los reviews de la ronda ${CUR} son de ${RC:0:7} y HEAD es ${HEAD_SHA:0:7}"
+elif [ -f "$LOCK" ] && [ "$LOCK" -nt "${RDIR}/.commit" ]; then launch $((CUR + 1)) "los reviews de la ronda ${CUR} son anteriores a implementa.lock: el spec se realineo con la base despues de revisar; se repite la revision (ronda $((CUR + 1)))"
 elif ! reviews_ok "$CUR"; then launch "$CUR" "los reviews de la ronda ${CUR} faltan o no cumplen el formato VERDICT/SCORE"
 fi
 if grep -ql '^REVIEWER_FALLO' "${RDIR}"/review-*.md 2>/dev/null; then
@@ -361,6 +389,10 @@ brain_problem() { # imprime por que el Brain/trace no sirve (vacio = valido)
       grep -qiE "^#{2,3}[[:space:]]+${h}" "${WT}/${JOB_PAGE}" || { echo "${JOB_PAGE} sin la seccion '## ${h}'"; return; }
     done
     grep -q "${GATE_COMMIT:0:7}" "${WT}/${JOB_PAGE}" || { echo "${JOB_PAGE} no cita el commit del gate (${GATE_COMMIT:0:7}): las pruebas se afirman con la evidencia de gate.md, no de memoria"; return; }
+    # Si el spec cita IDs de la base (Implementa:), la pagina lleva la misma linea con la union exacta (de ahi deriva project-status).
+    local ip ipc; ip="$(node "$SPEC_LINT" page "$SPEC" "${WT}/${JOB_PAGE}" 2>&1)"; ipc=$?
+    ip="$(printf '%s\n' "$ip" | sed 's/\x1b\[[0-9;]*m//g' | head -1)"
+    { [ "$ipc" -eq 0 ] && [ -z "$ip" ]; } || { echo "${JOB_PAGE}: ${ip:-spec-lint.mjs page fallo}"; return; }
   fi
   if [ "$ADR_TITLE" != "none" ]; then
     case "$listed" in *" 02-DOCS/wiki/sdd/decisions.md "*) ;; *) echo "el spec declara 'ADR: ${ADR_TITLE}': la linea Brain: debe incluir 02-DOCS/wiki/sdd/decisions.md"; return ;; esac

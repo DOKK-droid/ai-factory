@@ -36,11 +36,12 @@ const ENV_MENTION_RE = /(^|[^\w])\.env(?!\w)(?![.\w]*(?:example|sample|template)
 
 /** Ruta de destino protegida? Los directorios (terminan en "/") por prefijo; los archivos por nombre exacto. */
 /** Evidencia del pipeline: solo la escriben los scripts (checks.sh, launch-reviewers.sh), nunca un agente a mano. */
-// Incluye las marcas del humano (spec.ok, review.ok, brain.ok, pr.url) y el commit revisado de cada ronda (.commit).
-const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|spec\.ok|review\.ok|brain\.ok|pr\.url|round-[^/]+\/(review-[^/]+\.md|\.commit))$/;
+// Incluye las marcas del humano (spec.ok, review.ok, brain.ok, pr.url), el commit revisado de cada ronda (.commit) y
+// implementa.lock (lo escribe `project-lint stamp`, que solo acepta una confirmacion nueva del humano: ver RF-I18).
+const JOB_EVIDENCE_RE = /(^|\/)factory\/jobs\/[^/]+\/(gate\.md|spec\.ok|review\.ok|brain\.ok|implementa\.lock|pr\.url|round-[^/]+\/(review-[^/]+\.md|\.commit))$/;
 export function isProtectedPath(target) {
   const t = String(target).replace(/\\/g, '/').replace(/^\.\//, '');
-  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md, round-N/review-*.md, round-N/.commit (los escriben checks.sh y launch-reviewers.sh) o las marcas spec.ok / review.ok / brain.ok / pr.url (las crea el humano)';
+  if (JOB_EVIDENCE_RE.test(t)) return 'factory/jobs/<id>/gate.md, round-N/review-*.md, round-N/.commit (los escriben checks.sh y launch-reviewers.sh), las marcas spec.ok / review.ok / brain.ok / pr.url (las crea el humano) o implementa.lock (lo escribe project-lint stamp)';
   return PROTECTED_PATHS.find((p) => (p.endsWith('/') ? t.startsWith(p) || t.includes('/' + p) : t === p || t.endsWith('/' + p)));
 }
 /** El texto (codigo de un intérprete) menciona rutas protegidas o archivos .env? */
