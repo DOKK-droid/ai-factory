@@ -212,6 +212,7 @@ test('el builder sigue pudiendo escribir código y tests (la denegación es solo
 // ---------------------------------------------------------------- parche a archivos protegidos
 const nsPatched = fs.readFileSync(NEXT, 'utf8').includes('brain-request.mjs');
 const guardPatched = isProtectedPath('factory/jobs/j/brain.ok') !== undefined;
+const nsDocsPatched = fs.readFileSync(NEXT, 'utf8').includes('docs-job.mjs');   // parche de la rama 6 (docs/propuestas/rama6-docs-job.patch)
 const scopePatched = checkScope(['src/**'], [{ status: 'M', path: '02-DOCS/wiki/project/01-requisitos.md' }]).out.length === 0;
 const libPatched = /FACTORY_PROJECT_DOC_PATHS/.test(fs.readFileSync(path.join(REPO, '01-TOOLS/lib.sh'), 'utf8'));
 const miss = (ok) => (ok ? false : `falta aplicar ${PATCH}`);
@@ -316,7 +317,7 @@ test('next-step project_docs=required: sin base aprobada => STOP HUMAN_CONFIRM_P
   const none = nsJob('input', { project: { project_docs: 'required' } }); let r = none.ns();
   assert.equal(r.kind, 'STOP'); assert.equal(r.value, 'HUMAN_CONFIRM_PROJECT'); assert.equal(r.code, 2); assert.equal(r.state, 'project'); assert.match(r.why.join('\n'), /GATE 00-vision: AUSENTE/); assert.deepEqual(r.cmd, []);
   const listo = nsJob('input', { project: { project_docs: 'required' }, seed: { approve: false } }); r = listo.ns();
-  assert.equal(r.value, 'HUMAN_CONFIRM_PROJECT'); assert.deepEqual(r.cmd, ['node factory/scripts/project-lint.mjs approve 00-vision 01-requisitos 02-casos-de-uso 03-dominio 04-arquitectura 05-datos 06-despliegue']);
+  assert.equal(r.value, 'HUMAN_CONFIRM_PROJECT'); assert.deepEqual(r.cmd, [`${nsDocsPatched ? 'cd factory/worktrees/job-1 && ' : ''}node factory/scripts/project-lint.mjs approve 00-vision 01-requisitos 02-casos-de-uso 03-dominio 04-arquitectura 05-datos 06-despliegue`]);   // rama 6: el CMD se ejecuta en la worktree (antes aprobaba el checkout principal)
   const ok = nsJob('input', { project: { project_docs: 'required' }, seed: true }); r = ok.ns(); assert.equal(r.kind, 'DELEGATE'); assert.match(r.value, /^@spec-writer/);
 });
 test('next-step project_docs=required: un documento editado después de aprobarse vuelve a bloquear', { skip: miss(nsPatched) }, () => {
