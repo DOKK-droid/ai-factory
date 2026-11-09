@@ -276,3 +276,44 @@ test('RF-I14: el instalador lleva plantillas y scripts al destino sin crear docu
   assert.ok(!fs.existsSync(path.join(d, '02-DOCS/wiki/sdd/factory-init-spec.md')), 'las páginas de la fábrica no viajan');
   assert.equal(run('bash', [path.join(REPO, 'factory/scripts/install-into.sh'), d, '--check'], { cwd: REPO }).status, 0);
 });
+
+// ---------------------------------------------------------------- decisiones: impact Q-n/P-n/ADR-n y PL062
+function projectWithDiscovery(mut, other = {}) {
+  const p = makeProject(other);
+  const f = path.join(p.dir, 'discovery.md');
+  fs.writeFileSync(f, mut(fs.readFileSync(f, 'utf8')));
+  return p;
+}
+test('PL062 (aviso): [PENDIENTE] dentro de una pregunta [RESUELTO] cuenta para el gate; entre comillas de código no', () => {
+  const p = projectWithDiscovery((t) => t + '- Q-3 [RESUELTO]: ¿algo?\n  Lectura registrada: queda como [PENDIENTE] hasta salir.\n');
+  const r = check(p); has(r, 'PL062', /discovery\.md:\d+ .*Q-3/); assert.equal(r.status, 0, 'es aviso, no error');
+  const ok = projectWithDiscovery((t) => t + '- Q-3 [RESUELTO]: ¿algo?\n  Lectura registrada: queda como `[PENDIENTE]` hasta salir.\n');
+  hasNot(check(ok), 'PL062');
+  const abierta = projectWithDiscovery((t) => t + '- Q-3 [PENDIENTE]: ¿algo?\n');
+  hasNot(check(abierta), 'PL062');
+  const otra = projectWithDiscovery((t) => t + '- Q-3 [RESUELTO]: ¿algo?\n- Q-4 [PENDIENTE]: ¿otra?\n');
+  hasNot(check(otra), 'PL062');   // el pendiente de Q-4 no se atribuye a Q-3
+  hasNot(check(makeProject()), 'PL062');
+});
+test('impact Q-n: todas las menciones con documento:línea y dueño, la definición aparte, y solo la palabra completa', () => {
+  const p = makeProject({ edit: { '06-despliegue': sub('REQ-NF-1 se vigila', 'REQ-NF-1 (Q-10) se vigila') } });
+  const r = lintCli(p.root, 'impact', 'Q-1');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^DEFINE discovery\.md:\d+ \(discovery\) define Q-1$/m);
+  assert.match(r.stdout, /^REVISAR 01-requisitos\.md:\d+ \(system-analyst\) menciona Q-1$/m);
+  assert.match(r.stdout, /^REVISAR 02-casos-de-uso\.md:\d+ \(system-analyst\) menciona Q-1$/m);
+  assert.ok(!/06-despliegue/.test(r.stdout), 'Q-10 no es Q-1');
+  assert.match(lintCli(p.root, 'impact', 'Q-10').stdout, /^REVISAR 06-despliegue\.md:\d+ \(deployment-planner\) menciona Q-10$/m);
+});
+test('impact ADR-n y P-n usan la misma búsqueda; ignora bloques de código; sin menciones sale 0 y avisa por stderr', () => {
+  const p = makeProject({ edit: { '05-datos': (t) => t + '\n```\nQ-1 dentro de un bloque de código\n```\n' } });
+  assert.match(lintCli(p.root, 'impact', 'ADR-001').stdout, /^REVISAR 04-arquitectura\.md:\d+ \(architect\) menciona ADR-001$/m);
+  assert.ok(!/05-datos/.test(lintCli(p.root, 'impact', 'Q-1').stdout), 'un bloque de código no cuenta');
+  const n = lintCli(p.root, 'impact', 'P-9'); assert.equal(n.status, 0); assert.equal(n.stdout, ''); assert.match(n.stderr, /sin menciones de P-9/);
+});
+test('impact con un ID de definición (REQ/UC/ENT) y con un documento conserva su comportamiento', () => {
+  const p = makeProject();
+  assert.match(lintCli(p.root, 'impact', 'ENT-1').stdout, /^REVISAR /m);
+  assert.equal(lintCli(p.root, 'impact', 'REQ-F-99').status, 1);
+  assert.equal(lintCli(p.root, 'impact').status, 64);
+});

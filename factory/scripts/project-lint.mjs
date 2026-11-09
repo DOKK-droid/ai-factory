@@ -14,7 +14,7 @@
  * Uso:
  *   node project-lint.mjs check   [--dir D] [--root R] [--strict]   un problema por linea: CODIGO E|W archivo:linea mensaje
  *   node project-lint.mjs state   [--dir D] [--root R]              CLAVE=valor (lo consume init-project.sh)
- *   node project-lint.mjs impact  <ID|documento|--changed> [...]     si cambias X, revisa Y
+ *   node project-lint.mjs impact  <ID|Q-n|P-n|ADR-n|documento|--changed> [...]  si cambias X, revisa Y (Q/P/ADR: todas las menciones, discovery incluido)
  *   node project-lint.mjs trace   [--write] [...]                    trazabilidad.md (derivado, nunca a mano)
  *   node project-lint.mjs approve <documento...> [--bootstrap] [...] humano: registra el hash y marca aprobado
  *   node project-lint.mjs gate    [...]                              0 solo si los 7 documentos estan aprobados y frescos
@@ -220,6 +220,16 @@ export function analyze({ dir = DEFAULT_DIR, root = process.cwd(), strict = fals
     if (approved && d.plantilla && n !== 'discovery') P('PL070', 'E', n, 1, 'documento aprobado con marcadores RELLENAR');
   }
 
+  // ---- pendientes residuales en discovery: un [PENDIENTE] dentro de una Q/P ya [RESUELTO] cuenta para el gate ----
+  if (docs.discovery && !docs.discovery.missing) {
+    const dm = docs.discovery.m; let cur = null;
+    for (let i = docs.discovery.bodyStart; i < dm.length; i++) {
+      const head = dm[i].match(/^- ([QP]-\d+)\b[^:\n]*\[RESUELTO\]/);
+      if (head) cur = head[1]; else if (/^- \S/.test(dm[i]) || /^#{1,6}\s/.test(dm[i]) || dm[i].trim() === '') cur = null;
+      if (cur && labelsIn(dm[i]).some((x) => x.kind === 'PENDIENTE')) P('PL062', 'W', 'discovery', i + 1, `[PENDIENTE] dentro de ${cur} [RESUELTO]: un pendiente cuenta para el gate; si solo lo mencionas, escríbelo entre comillas de código`);
+    }
+  }
+
   // ---- glosario ----
   const dom = docs['03-dominio'];
   if (!dom.missing && !dom.plantilla) {
@@ -329,6 +339,18 @@ export const trace = (a) => buildTrace(a);
 export function dependents(a, n) {
   const mine = new Set([...a.defs.values()].filter((d) => d.doc === n).map((d) => d.id));
   return [...new Set(a.cites.filter((c) => mine.has(c.id) && c.doc !== n).map((c) => c.doc))].sort();
+}
+
+/** Menciones de una decision (Q-n, P-n, ADR-n) en los documentos y en discovery (sin bloques de codigo ni comentarios). */
+export const DECISION_ID = /^(?:[QP]-\d+|ADR-\d+)$/;
+export function mentions(a, id) {
+  const re = new RegExp(`(?<![\\w-])${escRe(id)}(?![\\w-])`);
+  const out = [];
+  for (const n of [...DOCS, 'discovery']) {
+    const d = a.docs[n]; if (!d || d.missing) continue;
+    d.m.forEach((l, i) => { if (i >= d.bodyStart && re.test(l)) out.push({ doc: n, line: i + 1, define: n === 'discovery' && new RegExp(`^- ${escRe(id)}\\b`).test(l) }); });
+  }
+  return out;
 }
 
 /** Lo que hay que reabrir segun project.ok: documentos cuyo contenido o cuyas citas cambiaron. */
@@ -511,6 +533,12 @@ function cli(argv) {
     const a = analyze(base);
     if (opt.changed) { const c = changed(a); c.forEach((x) => console.log(`REABRIR ${OWNERS[x.doc]} ${x.doc} (${x.why})`)); return 0; }
     const t = rest[0]; if (!t) return usage();
+    if (DECISION_ID.test(t)) {
+      const ms = mentions(a, t);
+      if (!ms.length) { console.error(`sin menciones de ${t}`); return 0; }
+      ms.forEach((x) => console.log(`${x.define ? 'DEFINE' : 'REVISAR'} ${x.doc}.md:${x.line} (${OWNERS[x.doc] || '—'}) ${x.define ? 'define' : 'menciona'} ${t}`));
+      return 0;
+    }
     if (DOCS.includes(t)) { dependents(a, t).forEach((n) => console.log(`REVISAR ${n} (${OWNERS[n]})`)); return 0; }
     if (!a.defs.has(t)) { console.error(`${t} no está definido`); return 1; }
     [...new Set(a.cites.filter((c) => c.id === t && c.doc !== a.defs.get(t).doc).map((c) => `${c.doc}.md:${c.line}`))].forEach((w) => console.log(`REVISAR ${w} (${OWNERS[w.split('.md')[0]] || '—'}) cita ${t}`));
