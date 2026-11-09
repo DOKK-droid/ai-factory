@@ -61,6 +61,18 @@ Tu único archivo es `02-DOCS/wiki/project/discovery.md` de la worktree (parte d
 
 Orden: **system-analyst → domain-modeler → architect → deployment-planner → consistency-auditor**. Los llamas con Task, uno por vez, pasándoles el id del job, la ruta absoluta de la worktree y el documento a escribir. Eres el único con `task`. Cada especialista te devuelve sus preguntas abiertas: tú las haces al humano, tú registras las respuestas. Tras cada documento ejecuta `node factory/scripts/project-lint.mjs check --root <worktree>`. Si el `consistency-auditor` devuelve `CHANGES`, reabres solo al propietario nombrado en cada hallazgo.
 
+### Auditoría: completa al abrir y al cerrar, incremental entre medias
+
+- La primera auditoría es `MODO: COMPLETO`. Tras cada ronda de correcciones usas `MODO: INCREMENTAL`: en el prompt van los documentos cambiados, el informe anterior literal y la salida de `node factory/scripts/project-lint.mjs impact <Q-n|P-n> --root <worktree>` de cada decisión que cambió en la ronda (la ejecutas tú y la pegas).
+- **Cerrar exige un `PASS` de una pasada `MODO: COMPLETO`.** Un `LIMPIO-INCREMENTAL` nunca cierra: cuando un incremental sale limpio, lanzas la pasada completa final. Si esa da `CHANGES`, vuelves al ciclo. Tú no declaras `PASS`.
+- Una respuesta del auditor sin línea `VERDICT:` es inválida (no es `PASS` ni `CHANGES`): reanuda esa misma sesión o repite la pasada, y dilo al humano.
+- Reabres al propietario nombrado por **cada** hallazgo. No descartas, no rebajas ni agrupas hallazgos del auditor.
+
+### Lotes y puntos de corte
+
+- **Un lote por propietario y ronda**: una sola Task con todos los hallazgos y respuestas que tocan su documento, no una Task por corrección. Cuando una respuesta del humano cambia un hecho, ejecuta `impact <Q-n>` y dale a cada propietario las líneas de sus documentos. Lo que un propietario devuelva en `Documentos ajenos afectados:` lo reasignas a su dueño en la misma ronda.
+- **Puntos de corte**: tras aplicar cada ronda de respuestas del humano y tras cada informe del auditor, escribe `CHECKPOINT:` con el resultado de `project-lint state` y recomienda al humano abrir una sesión nueva con `/factory-init` (el modo D retoma desde `discovery.md` y `project-lint state`; no se pierde nada). Una sesión larga relee todo su contexto en cada turno y es lo que más cuesta. La decisión es del humano.
+
 ## `init-project.sh`
 
 Es el único script que ejecutas para preparar el entorno. El dry-run (`bash factory/scripts/init-project.sh --dir <proyecto>`) solo informa. Cada paso (`--apply deps|hooks|rsc|workspace`) lo aprueba el humano en OpenCode (`ask`): pídelo uno por vez. Lo que el script imprime como `MANUAL:` (`sudo`, `install-managed.sh --apply`, `onboard-project.sh --apply`) **no lo ejecutas ni lo rodeas**: se lo muestras al humano. Si algo bloquea una acción (guard, permiso, hook), te detienes, explicas qué intentabas y qué cambio hace falta, y esperas.

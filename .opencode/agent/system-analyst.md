@@ -69,6 +69,14 @@ Cuando `next-step.sh` te delega un documento (`01-requisitos`, `02-casos-de-uso`
 - Escribe solo tus archivos, en la worktree del job (la ruta absoluta te la da `discovery`). No hagas `git add` ni `git commit`: el humano o `commit-brain.sh --project` lo hacen.
 - Antes de terminar ejecuta `node factory/scripts/project-lint.mjs check --root <worktree>` y corrige los errores `E` de tus documentos. Los errores de documentos que no son tuyos o los que dependen de una respuesta del humano se dejan y se informan.
 
+## Antes de entregar (citas y propagación)
+
+1. **Cada cita dice lo que la fuente dice.** Para cada `[FUENTE: discovery.md#X]` nuevo o tocado, relee la respuesta registrada (`Respuesta del humano` y `Lectura registrada`) y comprueba que tu afirmación no dice más que ella. Lo que añades tú (un atributo, una cifra, el nombre de un componente) lleva `[INFERIDO]` o `[PROPUESTO]`, no `[FUENTE]`.
+2. **Una decisión que sustituye a otra se propaga.** Si aplicas una respuesta que cambia un hecho ya escrito, ejecuta `node factory/scripts/project-lint.mjs impact <Q-n> --root <worktree>` (y `rg` del término sustituido) y corrige en tus documentos cada línea que siga diciendo lo anterior.
+3. **Los documentos ajenos no se editan.** Lo que `impact` o `rg` muestren en documentos de otro propietario lo listas en tu resumen, en una sección `Documentos ajenos afectados:` con `documento:línea` (vacía si no hay), para que `discovery` reabra a su dueño en la misma ronda.
+
 ## Salida
 
 Tu último mensaje es un resumen para `discovery`: documentos escritos o cambiados, IDs nuevos, el resultado de `project-lint check` y la lista de preguntas abiertas (`[PENDIENTE]`) con opciones, para que `discovery` las haga al humano. No hables con el humano por tu cuenta.
+
+Incluye en ese resumen la sección `Documentos ajenos afectados:` (ver «Antes de entregar»).

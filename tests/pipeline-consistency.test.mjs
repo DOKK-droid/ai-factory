@@ -297,3 +297,54 @@ test('D5/D9: la propia fabrica exige la base documental (project_docs=required) 
   assert.equal(CONFIG.fast_path.enabled, false, 'fast_path lo habilita el humano explicitamente');
   assert.equal(rolesApplied, 6, 'config.json lleva los roles de los seis agentes (los gobierna apply-models)');
 });
+
+// ---------------------------------------------------------------- ahorro de tokens: auditoria incremental, checklist de propietarios y lotes (TAREA C)
+const OWNERS_DOC = ['system-analyst', 'domain-modeler', 'architect', 'deployment-planner'];
+const agentText = (a) => fs.readFileSync(path.join(ROOT, '.opencode/agent', a + '.md'), 'utf8');
+
+test('C: los cuatro propietarios pueden ejecutar project-lint impact (para propagar una decision) y siguen sin aprobar ni generar la trazabilidad', () => {
+  for (const a of OWNERS_DOC) {
+    assert.equal(decide(perms(a).bash, 'node factory/scripts/project-lint.mjs impact Q-46 --root factory/worktrees/init-1'), 'allow', a);
+    assert.equal(decide(perms(a).bash, 'node factory/scripts/project-lint.mjs impact Q-1 approve'), 'deny', `${a}: approve sigue denegado aunque vaya tras impact`);
+    assert.equal(decide(perms(a).bash, 'node factory/scripts/project-lint.mjs approve 00-vision'), 'deny', a);
+    assert.equal(classifyBash('node factory/scripts/project-lint.mjs impact Q-46 --root factory/worktrees/init-1').blocked, false, 'el guard no debe bloquear impact');
+  }
+});
+test('C: los permisos de edicion de propietarios, auditor y discovery no se ampliaron', () => {
+  const onlyMine = { 'system-analyst': /00-vision|01-requisitos|02-casos-de-uso/, 'domain-modeler': /03-dominio|05-datos/, architect: /04-arquitectura|decisions\.md/, 'deployment-planner': /06-despliegue/ };
+  for (const a of OWNERS_DOC) {
+    const allows = perms(a).edit.filter(([, act]) => act === 'allow').map(([p]) => p);
+    assert.ok(allows.length > 0 && allows.every((p) => onlyMine[a].test(p) || /factory\/jobs\//.test(p)), `${a}: ${allows}`);
+  }
+  assert.equal(perms('consistency-auditor').edit.length, 0);
+  assert.deepEqual(perms('discovery').edit.filter(([, act]) => act === 'allow').map(([p]) => p), ['*factory/worktrees/*/02-DOCS/wiki/project/discovery.md']);
+});
+test('C: cada propietario tiene el checklist «Antes de entregar» y devuelve «Documentos ajenos afectados»', () => {
+  for (const a of OWNERS_DOC) {
+    const t = agentText(a);
+    assert.match(t, /## Antes de entregar \(citas y propagación\)/, a);
+    assert.match(t, /no dice más que ella/, a);
+    assert.match(t, /project-lint\.mjs impact <Q-n>/, a);
+    assert.match(t, /Documentos ajenos afectados:/, a);
+    assert.match(t, /Los documentos ajenos no se editan/, a);
+  }
+});
+test('C: el auditor distingue COMPLETO de INCREMENTAL; el incremental nunca da PASS y sin datos suficientes cae a COMPLETO', () => {
+  const t = agentText('consistency-auditor');
+  assert.match(t, /MODO: COMPLETO/); assert.match(t, /MODO: INCREMENTAL/);
+  assert.match(t, /Nunca escribes `PASS` en modo incremental|\*\*Nunca escribes `PASS` en modo incremental\*\*/);
+  assert.match(t, /trabajas en modo COMPLETO/);
+  assert.match(t, /VERDICT: PASS \| CHANGES \| LIMPIO-INCREMENTAL/);
+  assert.match(t, /`discovery\.md` incluido/);
+});
+test('C: discovery cierra solo con un PASS completo, no rebaja hallazgos, trabaja por lotes y propone puntos de corte', () => {
+  const t = agentText('discovery');
+  assert.match(t, /Cerrar exige un `PASS` de una pasada `MODO: COMPLETO`/);
+  assert.match(t, /`LIMPIO-INCREMENTAL` nunca cierra/);
+  assert.match(t, /Tú no declaras `PASS`/);
+  assert.match(t, /sin línea `VERDICT:` es inválida/);
+  assert.match(t, /No descartas, no rebajas ni agrupas hallazgos/);
+  assert.match(t, /Un lote por propietario y ronda/);
+  assert.match(t, /CHECKPOINT:/);
+  assert.match(t, /La decisión es del humano/);
+});
