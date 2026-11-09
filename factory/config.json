@@ -1,7 +1,7 @@
 {
   "tiers": {
     "opus": "opencode/nemotron-3.5-super-vl-free",
-    "sonnet": "opencode/deepseek-v4.1-flash-free",
+    "sonnet": "opencode-go/deepseek-v4-pro",
     "sol": "opencode/glm-5.3-flash-free",
     "astra": "opencode/mimo-v2.6-flash-free",
     "go-builder": "opencode-go/gpt-5.6-luna",
@@ -14,7 +14,7 @@
     "reviewer-security": "go-security",
     "reviewer-ux": "sol",
     "reviewer-ui": "sol",
-    "reviewer-code": "sol",
+    "reviewer-code": "sonnet",
     "approver": "go-approver",
     "human-gate": "go-approver",
     "memory-curator": "sol",

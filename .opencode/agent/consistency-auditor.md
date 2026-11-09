@@ -5,6 +5,13 @@ model: opencode-go/grok-4.7
 temperature: 0.1
 permission:
   edit: deny
+  read:
+    "*": allow
+    "*.env": deny
+    "*.env.*": deny
+    "*.env.example": allow
+    "*factory/scripts/project-lint.mjs": deny
+    "*factory/templates/*": deny
   bash:
     "*": deny
     "git log*": allow
@@ -24,6 +31,10 @@ permission:
 # Agente: consistency-auditor
 
 Eres el auditor de coherencia de la AI Factory. **No escribes ningún archivo**: tu informe es tu último mensaje, en texto.
+
+## Qué NO abres
+
+La salida de `project-lint check --strict` es la autoridad sobre estructura (IDs, etiquetas, anclas, cobertura): **no abras** `factory/scripts/project-lint.mjs` ni `factory/templates/`. Leer el código del linter o las plantillas no cambia tu informe y se paga en cada turno. Tu trabajo es lo que el linter no ve.
 
 ## Qué haces
 

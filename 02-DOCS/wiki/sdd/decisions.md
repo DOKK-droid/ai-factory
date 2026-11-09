@@ -339,7 +339,7 @@ La fuente de verdad de la asignación es `factory/config.json`. Estado a esta fe
 | intake | `astra` | `opencode/mimo-v2.6-flash-free` |
 | orchestrator | `opus` | `opencode/nemotron-3.5-super-vl-free` |
 
-Criterio: quien construye (builder), quien aprueba (approver) y quien audita seguridad usan familias distintas (OpenAI, Anthropic, xAI), y `reviewer-code` va en una familia distinta del builder, para decorrelacionar errores. Los IDs se validan contra `opencode models` con `factory/scripts/validate-models.mjs`; el 2026-11-04 verificó 11 modelos de 161 disponibles. El tier `sonnet` sigue definido en `config.json` pero ningún rol lo usa.
+Criterio: quien construye (builder), quien aprueba (approver) y quien audita seguridad usan familias distintas (OpenAI, Anthropic, xAI), y `reviewer-code` va en una familia distinta del builder, para decorrelacionar errores. Los IDs se validan contra `opencode models` con `factory/scripts/validate-models.mjs`; el 2026-11-04 verificó 11 modelos de 161 disponibles. El tier `sonnet` sigue definido en `config.json` pero ningún rol lo usa (ADR-012 lo asigna a reviewer-code).
 
 ### Alternativas consideradas
 - Solo modelos gratuitos (ADR-001, ADR-005): reemplazado; los roles críticos pasaron a modelos Go.
@@ -371,3 +371,26 @@ ADR-004 asumió que `03-SKILLS/` era el directorio que carga OpenCode y que `.ag
 ### Consecuencias
 - Antes de borrar se repitió la búsqueda de las tres rutas (sin referencias) y se confirmó que `opencode debug skill` sigue listando las cuatro skills de terceros desde `.agents/skills/`.
 - `install-into.sh` copia `03-SKILLS/` y también `.agents/skills/` con sus entradas de `skills-lock.json` (se añaden las que faltan; nunca se pisa una entrada del destino). La carpeta de skills de terceros depende del motor (`--engine`, por defecto `opencode`); solo se añade un motor cuando su ruta está verificada, y uno desconocido se rechaza.
+
+
+## ADR-012: `reviewer-code` en DeepSeek V4 Pro (tier `sonnet`)
+
+Fecha: 2026-11-09
+Estado: Aprobado (decisión del humano en la sesión del 2026-11-09; se aprueba al fusionar el PR que la introduce)
+
+### Contexto
+ADR-010 dejó a spec-writer, reviewer-ux, reviewer-ui, reviewer-code y memory-curator en el mismo modelo (GLM gratuito). La corrida del caso A (job `init-261107-5a04`, 45 sesiones medidas en `opencode.db`) mostró además que, en un job de documentación, quien redacta (system-analyst, domain-modeler, deployment-planner) y quien revisa (reviewer-code, reviewer-ux, reviewer-ui) son el mismo modelo. El tier `sonnet` existía en `config.json` (`opencode/deepseek-v4.1-flash-free`, verificado con `opencode models`) y ningún rol lo usaba.
+
+### Decisión
+- El tier `sonnet` pasa a `opencode-go/deepseek-v4-pro` (familia DeepSeek, incluida en opencode-go; existe según `opencode models`).
+- `reviewer-code` usa el tier `sonnet`. Los demás roles no cambian. El nombre del tier es histórico: no es un modelo de Anthropic.
+- Criterio de ADR-010 se mantiene: `reviewer-code` queda en una familia distinta del builder (GPT) y, ahora, también de quienes redactan documentación (GLM, Claude Haiku) y del auditor (Grok).
+
+### Alternativas consideradas
+- `opencode/deepseek-v4.1-flash-free` (gratuito): descartado por el humano a favor de la versión Pro para el revisor de código.
+- Mover también reviewer-ux y reviewer-ui: no se hace. En proyectos sin interfaz (`Surface: none`) devuelven `PASS (n/a)` y pagarían lectura del diff sin aportar señal.
+
+### Consecuencias
+- Pasa a ser un rol de pago en opencode-go: el consumo aumenta en cada ronda de revisión. El costo y la calidad **no están medidos**; se medirán con `factory/scripts/job-cost.mjs` en la siguiente corrida real.
+- Verificar que el modelo respeta `VERDICT:`/`SCORE:`: `launch-reviewers.sh` falla cerrado (`CHANGES/0`), de modo que un formato roto cuesta una ronda, no un falso verde.
+- Si el consumo no se justifica o el formato falla, volver a `sol` es cambiar una línea de `factory/config.json` y ejecutar `apply-models.js`.
